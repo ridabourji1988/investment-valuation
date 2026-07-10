@@ -1,0 +1,216 @@
+# Formula Registry — single source of truth (PRD §5).
+# CI (tests/test_registry.py) fails if any formula lacks a citation or a unit
+# test. `implementation_ref` points at the Python callable; `tests` names the
+# pytest node(s) that reproduce a worked example from the cited source.
+
+capm_cost_of_equity:
+  name: Cost of equity (CAPM)
+  expression: "Re = Rf + beta * ERP"
+  variables:
+    Rf: Risk-free rate (10Y Treasury, FRED DGS10)
+    beta: Levered (bottom-up) equity beta
+    ERP: Equity risk premium (Damodaran implied premium)
+  source_citation: "Damodaran, Investment Valuation 3e, ch. 7-8; 'Equity Risk Premiums: Determinants, Estimation and Implications'"
+  implementation_ref: "valuescope.engine.capm:cost_of_equity"
+  tests: ["tests/test_capm.py::test_capm_worked_example"]
+
+bottom_up_beta:
+  name: Bottom-up levered beta (Hamada)
+  expression: "beta_L = beta_U * (1 + (1 - t) * D_over_E)"
+  variables:
+    beta_U: Unlevered (asset) sector beta
+    t: Marginal tax rate
+    D_over_E: Debt-to-equity ratio
+  source_citation: "Damodaran, Investment Valuation 3e, ch. 8 (Hamada relation); sector betas from Damodaran data page"
+  implementation_ref: "valuescope.engine.beta:relever_beta"
+  tests: ["tests/test_beta.py::test_relever_beta_worked_example"]
+
+wacc:
+  name: Weighted average cost of capital
+  expression: "WACC = (E/V) * Re + (D/V) * Rd * (1 - t)"
+  variables:
+    E: Market value of equity
+    D: Market value of debt
+    V: E + D
+    Re: Cost of equity
+    Rd: Pre-tax cost of debt
+    t: Marginal tax rate
+  source_citation: "Damodaran, Applied Corporate Finance 4e, ch. 4"
+  implementation_ref: "valuescope.engine.wacc:wacc"
+  tests: ["tests/test_wacc.py::test_wacc_worked_example"]
+
+fcff:
+  name: Free cash flow to the firm (growth-driven form)
+  expression: "FCFF = EBIT * (1 - t) - Reinvestment ; Reinvestment = dRevenue / SalesToCapital"
+  variables:
+    EBIT: Operating income (after lease/R&D adjustments)
+    t: Marginal tax rate
+    dRevenue: Change in revenue vs prior year
+    SalesToCapital: Sales-to-capital ratio
+  source_citation: "Damodaran, Investment Valuation 3e, ch. 14-15; Narrative and Numbers, ch. 8-10"
+  implementation_ref: "valuescope.engine.dcf:fcff"
+  tests: ["tests/test_dcf.py::test_fcff_definition"]
+
+terminal_value:
+  name: Terminal value (Gordon growth on FCFF)
+  expression: "TV = FCFF_next / (WACC_stable - g) ; constraint g <= Rf"
+  variables:
+    FCFF_next: First terminal-year FCFF (year 11)
+    WACC_stable: Stable-phase cost of capital
+    g: Perpetual growth rate
+    Rf: Risk-free rate (upper bound on g)
+  source_citation: "Damodaran, Investment Valuation 3e, ch. 12"
+  implementation_ref: "valuescope.engine.dcf:terminal_value"
+  tests: ["tests/test_dcf.py::test_terminal_value_worked_example"]
+
+intrinsic_value_fcff:
+  name: Intrinsic value per share (10-year FCFF DCF)
+  expression: "V0 = sum(FCFF_t / (1+WACC)^t) + TV/(1+WACC)^N ; equity = EV - netDebt ; perShare = equity / shares"
+  variables:
+    FCFF_t: Free cash flow to firm in year t
+    WACC: Cost of capital (fades to stable)
+    TV: Terminal value
+    N: Explicit horizon (10 years)
+    netDebt: Total debt minus cash
+    shares: Diluted shares outstanding
+  source_citation: "Damodaran fcffsimpleginzu spreadsheet, NYU Stern; Investment Valuation 3e ch. 12-15"
+  implementation_ref: "valuescope.engine.dcf:intrinsic_value"
+  tests: ["tests/test_dcf.py::test_intrinsic_value_worked_example", "tests/test_dcf.py::test_ginzu_no_growth_equals_perpetuity"]
+
+reverse_dcf:
+  name: Reverse DCF (market-implied growth)
+  expression: "solve g such that intrinsic_value(g) = market_price (bisection)"
+  variables:
+    market_price: Current share price
+    g: Implied revenue growth rate that clears the model
+  source_citation: "Damodaran, Narrative and Numbers, ch. 11; Mauboussin & Rappaport, Expectations Investing"
+  implementation_ref: "valuescope.engine.reverse_dcf:implied_growth"
+  tests: ["tests/test_reverse_dcf.py::test_reverse_dcf_roundtrip"]
+
+margin_of_safety:
+  name: Margin of safety
+  expression: "MoS = (V - P) / V"
+  variables:
+    V: Intrinsic value per share
+    P: Market price per share
+  source_citation: "Graham, The Intelligent Investor, ch. 20"
+  implementation_ref: "valuescope.engine.screening:margin_of_safety"
+  tests: ["tests/test_screening.py::test_margin_of_safety"]
+
+ncav:
+  name: Net current asset value (net-nets)
+  expression: "NCAV = CurrentAssets - TotalLiabilities ; buy zone P < (2/3) * NCAV_per_share"
+  variables:
+    CurrentAssets: Total current assets
+    TotalLiabilities: Total liabilities
+  source_citation: "Graham & Dodd, Security Analysis (6e), ch. on liquidating value"
+  implementation_ref: "valuescope.engine.screening:ncav"
+  tests: ["tests/test_screening.py::test_ncav"]
+
+magic_formula:
+  name: Magic Formula (earnings yield + return on capital)
+  expression: "EY = EBIT/EV ; ROC = EBIT/(NetWorkingCapital + NetFixedAssets)"
+  variables:
+    EBIT: Operating income
+    EV: Enterprise value
+    NetWorkingCapital: Current assets minus current liabilities (ex cash/debt)
+    NetFixedAssets: Net PP&E
+  source_citation: "Greenblatt, The Little Book That Still Beats the Market, appendix"
+  implementation_ref: "valuescope.engine.screening:magic_formula"
+  tests: ["tests/test_screening.py::test_magic_formula"]
+
+piotroski_f_score:
+  name: Piotroski F-Score (9 binary signals)
+  expression: "F = sum of 9 fundamental signals (profitability, leverage/liquidity, efficiency)"
+  variables:
+    profitability: 4 signals (ROA>0, CFO>0, dROA>0, accrual CFO>ROA)
+    leverage: 3 signals (dLeverage<0, dCurrentRatio>0, no new shares)
+    efficiency: 2 signals (dGrossMargin>0, dAssetTurnover>0)
+  source_citation: "Piotroski (2000), Journal of Accounting Research"
+  implementation_ref: "valuescope.engine.quality:piotroski_f_score"
+  tests: ["tests/test_quality.py::test_piotroski_full_marks", "tests/test_quality.py::test_piotroski_weak_firm"]
+
+altman_z_score:
+  name: Altman Z-Score (manufacturing form)
+  expression: "Z = 1.2*A + 1.4*B + 3.3*C + 0.6*D + 1.0*E"
+  variables:
+    A: Working capital / total assets
+    B: Retained earnings / total assets
+    C: EBIT / total assets
+    D: Market value of equity / total liabilities
+    E: Sales / total assets
+  source_citation: "Altman (1968), Journal of Finance; Altman (2000) update"
+  implementation_ref: "valuescope.engine.quality:altman_z_score"
+  tests: ["tests/test_quality.py::test_altman_z_worked_example"]
+
+beneish_m_score:
+  name: Beneish M-Score (earnings-manipulation model)
+  expression: "M = -4.84 + 0.92*DSRI + 0.528*GMI + 0.404*AQI + 0.892*SGI + 0.115*DEPI - 0.172*SGAI + 4.679*TATA - 0.327*LVGI"
+  variables:
+    DSRI: Days sales in receivables index
+    GMI: Gross margin index
+    AQI: Asset quality index
+    SGI: Sales growth index
+    DEPI: Depreciation index
+    SGAI: SG&A index
+    TATA: Total accruals to total assets
+    LVGI: Leverage index
+  source_citation: "Beneish (1999), Financial Analysts Journal"
+  implementation_ref: "valuescope.engine.quality:beneish_m_score"
+  tests: ["tests/test_quality.py::test_beneish_m_worked_example"]
+
+quality_composite:
+  name: Quality composite score (0-100)
+  expression: "weighted blend of ROIC-vs-WACC spread, growth consistency, leverage, cash conversion"
+  variables:
+    roic_spread: ROIC minus WACC
+    growth_consistency: variance-penalised revenue growth
+    leverage: net debt / EBITDA
+    cash_conversion: CFO / net income
+  source_citation: "ValueScope house rule v1 (per PRD P3); components grounded in Damodaran Applied Corporate Finance 4e (ROIC-WACC spread)"
+  implementation_ref: "valuescope.engine.quality:quality_composite"
+  tests: ["tests/test_quality.py::test_quality_composite_bounds"]
+
+sahm_rule:
+  name: Sahm recession indicator
+  expression: "Sahm = avg(U, last 3 months) - min(avg3(U), trailing 12 months) ; trigger >= 0.50pp"
+  variables:
+    U: Unemployment rate (FRED UNRATE)
+  source_citation: "Sahm (2019); FRED series SAHMREALTIME"
+  implementation_ref: "valuescope.engine.macro:sahm_rule"
+  tests: ["tests/test_macro.py::test_sahm_rule_trigger", "tests/test_macro.py::test_sahm_rule_calm"]
+
+regime_classifier:
+  name: Macro regime classifier (rule table)
+  expression: "label from T10Y3M sign, ISM PMI vs 50, HY OAS level, Sahm trigger"
+  variables:
+    t10y3m: 10Y minus 3M Treasury spread (FRED T10Y3M)
+    pmi: ISM manufacturing PMI
+    hy_oas: High-yield option-adjusted spread (FRED BAMLH0A0HYM2)
+    sahm_triggered: Sahm rule fired
+  source_citation: "Marks, Mastering the Market Cycle; NBER business-cycle documentation (framework); ValueScope house rule v1 for thresholds"
+  implementation_ref: "valuescope.engine.macro:classify_regime"
+  tests: ["tests/test_macro.py::test_regime_expansion", "tests/test_macro.py::test_regime_stress"]
+
+monte_carlo_valuation:
+  name: Monte Carlo valuation distribution
+  expression: "sample growth, target margin, WACC; report P(V>P), P10/P50/P90 over >=10000 runs"
+  variables:
+    growth_dist: Distribution on revenue growth
+    margin_dist: Distribution on target operating margin
+    wacc_dist: Distribution on cost of capital
+  source_citation: "Damodaran, 'Probabilistic Approaches: Scenario Analysis, Decision Trees and Simulations'"
+  implementation_ref: "valuescope.engine.montecarlo:simulate"
+  tests: ["tests/test_montecarlo.py::test_percentile_ordering", "tests/test_montecarlo.py::test_prob_above_price"]
+
+verdict_rules:
+  name: Buy/Hold/Sell verdict (house rule v1)
+  expression: "BUY if MoS>=25% and Quality>=60 and P(V>P)>=70% and trapFlags<=2; SELL if P>=1.1V or trapFlags>=4; else HOLD"
+  variables:
+    mos: Margin of safety
+    quality: Quality composite
+    p_v_gt_p: Probability value exceeds price
+    trap_flags: Count of value-trap signals
+  source_citation: "ValueScope house rule v1 (PRD §9); position sizing per Graham, Intelligent Investor ch. 5, 14"
+  implementation_ref: "valuescope.engine.verdict:decide"
+  tests: ["tests/test_verdict.py::test_buy_verdict", "tests/test_verdict.py::test_sell_verdict", "tests/test_verdict.py::test_hold_verdict"]

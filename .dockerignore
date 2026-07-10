@@ -1,0 +1,12 @@
+**/__pycache__/
+**/*.pyc
+backend/.venv/
+backend/.pytest_cache/
+web/node_modules/
+web/dist/
+.git/
+*.md
+!README.md
+.env
+*.duckdb
+data_cache/

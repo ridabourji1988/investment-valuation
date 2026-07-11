@@ -31,3 +31,13 @@
 **Context**: User asked repeatedly about oil/gas/metals/crypto.
 **Choice**: Proposed a separate "Priced Assets" section (relative pricing, futures curve, staking yield) — never a fair value; awaiting explicit go-ahead.
 **Outcome**: PENDING
+
+### 2026-07-11 Decision: Priced Assets shipped as pricing-only module
+**Context**: User approved ("go on with the last 2 decisions").
+**Choice**: Markets tab, Coinbase + FRED→Yahoo chains, percentile context, no fair values ever.
+**Outcome**: GOOD — live-verified same day.
+
+### 2026-07-11 Decision: ESEF via filings.xbrl.org xBRL-JSON (design validated)
+**Context**: Live probe proved GLEIF→filings.xbrl.org→OIM-JSON end-to-end (Air France FY2024 extracted).
+**Choice**: Implement per the recipe in PLAN.md Milestone 2. Germany is NOT in filings.xbrl.org — BMW excluded until a German OAM source exists; SAP unaffected (20-F).
+**Outcome**: PENDING (implementation next session)

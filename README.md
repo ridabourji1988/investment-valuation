@@ -32,7 +32,7 @@ step-by-step arithmetic → the book the formula comes from).
 
 ## Tested math
 
-The acceptance bar is correctness of the financial calculations. **66 tests pass**,
+The acceptance bar is correctness of the financial calculations. **67 tests pass**,
 each reproducing a textbook/Damodaran worked example within tolerance (API tests run
 offline against fixtures; the live pipeline is verified separately):
 
@@ -40,7 +40,7 @@ offline against fixtures; the live pipeline is verified separately):
 cd backend
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest            # 66 passed
+pytest            # 67 passed
 ```
 
 Highlights: the DCF collapses to a closed-form perpetuity `NOPAT/WACC` under zero

@@ -180,7 +180,8 @@ def latest_annual(facts: dict, concepts: list[str], *, unit: str = "USD",
 def shares_outstanding(facts: dict) -> float | None:
     """Share count for per-share values: dei cover-page shares outstanding,
     falling back to diluted weighted-average shares (multi-class filers like
-    Alphabet omit the dei tag) and then instant common shares outstanding."""
+    Alphabet omit the dei tag), instant common shares outstanding, then the
+    ifrs-full equivalents (20-F filers like Novo Nordisk have no dei count)."""
     try:
         items = [x for x in
                  facts["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"]
@@ -190,7 +191,10 @@ def shares_outstanding(facts: dict) -> float | None:
     except KeyError:
         pass
     for concept, flow in (("WeightedAverageNumberOfDilutedSharesOutstanding", True),
-                          ("CommonStockSharesOutstanding", False)):
+                          ("CommonStockSharesOutstanding", False),
+                          ("NumberOfSharesOutstanding", False),
+                          ("AdjustedWeightedAverageShares", True),
+                          ("WeightedAverageShares", True)):
         s = annual_series(facts, [concept], unit="shares", flow=flow, n=1)
         if s and s[-1][1] > 0:
             return s[-1][1]

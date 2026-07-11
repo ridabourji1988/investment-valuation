@@ -100,12 +100,32 @@ PRETAX = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItems
 INTEREST = ["InterestExpense", "InterestExpenseDebt", "InterestExpenseNonoperating",
             "InterestAndDebtExpense", "FinanceCosts"]
 RETAINED = ["RetainedEarningsAccumulatedDeficit", "RetainedEarnings"]
+GOODWILL = ["Goodwill"]
 DILUTED_SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding",
                   "AdjustedWeightedAverageShares", "WeightedAverageShares"]
 
 
 def _clamp(x, lo, hi):
     return max(lo, min(hi, x))
+
+
+def operating_invested_capital(equity_book: float | None, debt: float,
+                               cash: float, goodwill: float, *,
+                               market_cap: float, revenue: float) -> float:
+    """Capital that operations actually employ (Damodaran, "Invested Capital:
+    Measurement Issues"): acquisition goodwill is a sunk purchase premium, not
+    productive capital that future growth must re-buy, so it is excluded from
+    the base for sales-to-capital and ROIC. Leaving it in makes serial
+    acquirers look reinvestment-starved — AMD post-Xilinx (~$45B goodwill)
+    computed $1.61 of "required" capital per $1 of new revenue, ten years of
+    phantom negative FCFF, and a negative fair value."""
+    ic = (equity_book if equity_book is not None else market_cap * 0.5) \
+        + debt - cash - goodwill
+    if ic <= 0:
+        # Goodwill-heavy balance sheets can go negative ex-goodwill; fall back
+        # to a neutral 2.0x sales-to-capital base rather than divide by <= 0.
+        ic = revenue / 2.0
+    return ic
 
 
 class _Money:
@@ -300,9 +320,10 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     target_margin = _clamp(max(margin_now, statistics.median(margins)), 0.03, 0.45)
 
     equity_book = money.latest(EQUITY)
-    invested_capital = (equity_book or market_cap * 0.5) + debt - cash
-    if invested_capital <= 0:
-        invested_capital = revenue / 2.0
+    goodwill = money.latest(GOODWILL) or 0.0
+    invested_capital = operating_invested_capital(
+        equity_book, debt, cash, goodwill,
+        market_cap=market_cap, revenue=revenue)
     sales_to_capital = _clamp(revenue / invested_capital, 0.5, 5.0)
     roic = _clamp(ebit * (1 - tax_rate) / invested_capital, 0.05, 0.30)
 

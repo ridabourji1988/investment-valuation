@@ -189,6 +189,11 @@ export default function Feed({ onOpen, onMacro }) {
             {retrying ? <><span className="spinner" style={{ width: 10, height: 10 }} />Rescanning…</> : 'Retry now'}
           </button>
           <ScannerStatus scanner={feed.scanner} />
+          {Object.keys(feed.failed || {}).length > 0 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Latest source error: {topReason(feed.failed)}
+            </div>
+          )}
         </div>
       )}
       {!feed.warming && feed.count > 0 && Object.keys(feed.failed || {}).length > 0 && (
@@ -248,6 +253,12 @@ export default function Feed({ onOpen, onMacro }) {
       <Disclaimer />
     </div>
   )
+}
+
+function topReason(failed) {
+  const counts = {}
+  Object.values(failed).forEach((m) => { const k = String(m).slice(0, 140); counts[k] = (counts[k] || 0) + 1 })
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
 }
 
 function ScannerStatus({ scanner }) {

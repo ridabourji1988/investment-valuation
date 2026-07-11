@@ -8,9 +8,9 @@ nothing ever falls back to made-up numbers.
 """
 from __future__ import annotations
 
-from ..config import config
+from ..config import DEFAULT_UNIVERSE, config
 from ..engine.analyze import CompanyInputs
-from . import live, macro_live, market, yahoo
+from . import indexes, live, macro_live, market, yahoo
 from .cache import get_cached
 
 _TTL_COMPANY = 15 * 60   # price freshness; EDGAR layer caches facts 12h anyway
@@ -18,7 +18,24 @@ _TTL_MACRO = 60 * 60
 
 
 def list_tickers() -> list[str]:
-    return list(config.UNIVERSE)
+    """Universe with expansion tokens: SP500 -> current S&P 500 constituents
+    (ex-financials/real-estate); EU -> the scannable ESEF names. Tokens
+    compose with plain tickers: VALUESCOPE_UNIVERSE="SP500,EU,TM"."""
+    out: list[str] = []
+    for t in config.UNIVERSE:
+        if t in ("SP500", "S&P500"):
+            try:
+                out.extend(indexes.sp500_tickers())
+            except Exception:  # noqa: BLE001 — list source down: honest fallback
+                print("WARNING: S&P 500 constituents unavailable — "
+                      "falling back to the curated default universe")
+                out.extend(DEFAULT_UNIVERSE)
+        elif t == "EU":
+            out.extend(x for x in DEFAULT_UNIVERSE if "." in x)
+        else:
+            out.append(t)
+    seen: set = set()
+    return [t for t in out if not (t in seen or seen.add(t))]
 
 
 def get_macro() -> dict:

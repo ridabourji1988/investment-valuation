@@ -75,13 +75,13 @@ docker run -p 8000:8000 --env-file .env valuescope
 2. In **Project → Variables**, set **one variable**:
    - `OPENROUTER_API_KEY` — your OpenRouter key (comma-separate multiple keys).
    Everything else has autonomous defaults (`z-ai/glm-5.2` via `streamlake`,
-   temperature 0, ~110-ticker global universe, keyless data pipeline) — see
+   temperature 0, ~130-ticker global universe, keyless data pipeline) — see
    `.env.example` for optional overrides.
 3. Deploy. Railway injects `PORT`; the server binds `0.0.0.0:$PORT` automatically.
    The single service serves both the API and the React app.
 
 At startup the server scans the whole universe in the background (SEC filings, prices,
-macro). The default universe covers the US, Europe and emerging markets (~110 names
+macro). The default universe covers the US, Europe and emerging markets (~130 names
 across tech, health care, consumer, industrials, energy and materials — banks and
 insurers are excluded until a dedicated financial-sector model exists, because an
 FCFF DCF misvalues them);
@@ -109,6 +109,23 @@ with deterministic narrative text.
   searchable but need Yahoo for prices.
 - **Not covered**: unsponsored-ADR-only names with no official XBRL source (e.g.
   Nestlé's OTC ticker) — search shows them greyed out rather than faking numbers.
+
+### Extending the scan
+
+Set `VALUESCOPE_UNIVERSE` (Railway → Variables). It accepts plain tickers and
+expansion tokens, composable:
+
+| Value | Scan |
+|---|---|
+| *(unset)* | curated ~130-name default |
+| `SP500,EU` | current S&P 500 (ex-financials/real-estate, ~400 names) + European ESEF names |
+| `SP500,EU,TSM,BABA` | tokens plus any extra tickers |
+| `AAPL,MC.PA` | fully custom list |
+
+A 400+ universe takes ~30–60 min to warm the first time (sources are paced to
+stay under rate limits); results stream into the feed as they complete and
+persist across restarts. Everything else — any SEC filer, any ESEF registry
+name — remains analyzable on demand through search without being scanned.
 
 ## Prompt caching
 

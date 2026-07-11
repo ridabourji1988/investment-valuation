@@ -65,6 +65,8 @@ DEFAULT_UNIVERSE = [
     "VALE", "PBR", "MELI", "BHP",
     # EU-only filers via official ESEF filings (data/esef.py registry; valued
     # in EUR with the ECB risk-free rate). Suffixed = home-exchange listing.
+    # Every name below was LEI-verified against filings.xbrl.org AND built
+    # end-to-end with a plausible output before inclusion (2026-07-11).
     # Helsinki names (KNEBV.HE, NESTE.HE, UPM.HE) stay out of the default
     # scan: no keyless price fallback for Nasdaq Helsinki yet (Yahoo-only) —
     # they remain searchable/analyzable on demand.
@@ -72,8 +74,11 @@ DEFAULT_UNIVERSE = [
     # cyclicals valued off post-COVID revenue trends need cycle-normalized
     # margins first (backlog) — the model over-extrapolates their recovery.
     "MC.PA", "RMS.PA", "OR.PA", "AIR.PA", "SU.PA", "KER.PA", "DSY.PA",
-    "EL.PA", "ML.PA", "RI.PA", "ADYEN.AS", "HEIO.AS", "ASM.AS",
-    "WKL.AS", "AD.AS",
+    "EL.PA", "ML.PA", "RI.PA", "AI.PA", "SAF.PA", "DG.PA", "BN.PA",
+    "HO.PA", "SGO.PA", "LR.PA", "CAP.PA", "PUB.PA", "ORA.PA", "VIE.PA",
+    "SW.PA", "AC.PA", "CA.PA", "BVI.PA",
+    "ADYEN.AS", "HEIA.AS", "AKZA.AS", "RAND.AS", "JDEP.AS", "UMG.AS",
+    "ASM.AS", "WKL.AS", "AD.AS",
 ]
 
 

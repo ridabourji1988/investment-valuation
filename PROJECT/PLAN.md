@@ -61,8 +61,11 @@ real-price percentile vs long history, futures curve read (contango/backwd.),
 staking-yield note for PoS crypto. Never a "fair value".
 
 ## Backlog / options
-- Universe: user can set VALUESCOPE_UNIVERSE (any size); optional "S&P 500
-  mode" default — warm ~15 min first pass, then incremental.
+- ESEF auto-discovery: any filings.xbrl.org entity analyzable on demand —
+  needs LEI→ISIN→price resolution (Boursorama FF11- codes cover more venues,
+  e.g. FF11-UCB works for Brussels; symbology unmapped) + non-EUR risk-free
+  curves (DKK/SEK/GBP/NOK). Registry-first approach shipped 2026-07-11
+  (37 entities); Bouygues excluded (no share count tag in its ESEF).
 - Bank/insurer + captive-finance valuation model (FCFE/DDM) — re-admit
   JPM/HSBC/Toyota etc. honestly.
 - Cycle-normalized margins for cyclicals (Damodaran) — better CVX/VALE/RIO.

@@ -65,3 +65,10 @@
 **Choice**: OIM→EDGAR-shape adapter so the entire existing assembly (tag fallbacks, share identities, forensics) works on EU filings unchanged; EUR end-to-end with ECB AAA 10y as risk-free.
 **Outcome**: GOOD — LVMH FY2024 revenue €84.68B extracted exactly; 106/108 universe live locally.
 **Lesson**: adapting a new source to an existing internal shape beats a parallel pipeline — every hard-won fallback came free.
+
+### 2026-07-11 Decision: Universe expansion tokens + EU registry x2 via ISIN
+**Context**: User wants more than the 108 curated names ("why only 16 EU companies? how to extend beyond 108?").
+**Choice**: (1) GLEIF ISIN search (filter[isin]) resolves operating-entity LEIs where name search failed — all 21 new candidates verified, 20 valued plausibly (Bouygues tags no share count → dropped). EU registry now 37 entities, 34 in the default scan (~127 total). Heineken Holding swapped for Heineken N.V. (double-counted the same group). (2) VALUESCOPE_UNIVERSE tokens: SP500 (Wikipedia constituents, ex-financials/real-estate, ~400) and EU, composable with plain tickers. (3) Every new registry name was built end-to-end and screened for implausible fair/price before inclusion.
+**Alternatives considered**: full ESEF auto-discovery (any filer on demand via LEI→ISIN→price) — needs ISIN-based price resolution; deferred to backlog.
+**Outcome**: PENDING (Railway verification after deploy)
+**Lesson**: GLEIF fulltext finds subsidiaries; ISIN finds the issuer. Screen every mechanically-added name empirically before it ships.

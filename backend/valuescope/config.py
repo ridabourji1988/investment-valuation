@@ -12,6 +12,25 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _universe() -> list:
+    """Parse VALUESCOPE_UNIVERSE, dropping tokens that cannot be tickers.
+
+    A misplaced value (e.g. "10000" intended for VALUESCOPE_MC_RUNS) must not
+    blank the whole app — anything with no letters is discarded, and an empty
+    result falls back to the curated default.
+    """
+    raw = os.getenv("VALUESCOPE_UNIVERSE", "")
+    tickers = [t.strip().upper() for t in raw.split(",") if t.strip()]
+    valid = [t for t in tickers
+             if any(c.isalpha() for c in t)
+             and all(c.isalnum() or c in ".-" for c in t) and len(t) <= 8]
+    dropped = [t for t in tickers if t not in valid]
+    if dropped:
+        print(f"WARNING: ignoring invalid VALUESCOPE_UNIVERSE entries {dropped} "
+              f"(not ticker symbols){' — using default universe' if not valid else ''}")
+    return valid or list(DEFAULT_UNIVERSE)
+
+
 # Default scan universe: US megacaps + European and emerging-market leaders
 # via their US listings (ADRs file 20-F/40-F with the SEC, so the same XBRL
 # pipeline covers them; IFRS statements are converted to US$ at spot).
@@ -50,9 +69,7 @@ DEFAULT_UNIVERSE = [
 class Config:
     # Data
     SEC_UA: str = os.getenv("VALUESCOPE_SEC_UA", "ValueScope research contact@example.com")
-    UNIVERSE: list = [t.strip().upper() for t in
-                      os.getenv("VALUESCOPE_UNIVERSE", ",".join(DEFAULT_UNIVERSE)).split(",")
-                      if t.strip()]
+    UNIVERSE: list = _universe()
     # Optional last-resort market-data key (free tier ~25 req/day). The
     # keyless chain (Yahoo -> Cboe, er-api/ECB) carries everything without it.
     ALPHAVANTAGE_API_KEY: str = os.getenv("ALPHAVANTAGE_API_KEY", "")

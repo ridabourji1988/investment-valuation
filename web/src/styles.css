@@ -171,6 +171,14 @@ table.inputs .src { color: var(--gray); font-size: 12px; }
   overflow: hidden; max-width: 420px; }
 .warmbar .fill { height: 100%; background: var(--blue); border-radius: 2px;
   transition: width 0.6s ease; }
+.filterbar { margin: 0 16px 10px; padding: 10px 12px; background: var(--elev2, #1c1c1e);
+  border-radius: 12px; }
+.filterbar .frow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 4px 0; }
+.filterbar .flabel { color: var(--gray); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.4px; margin-right: 4px; }
+.filterbar .tag { cursor: pointer; user-select: none; }
+.pill-btn.on { color: #fff; background: var(--blue); }
 .muted { color: var(--gray); }
 a { color: var(--blue); text-decoration: none; }
 

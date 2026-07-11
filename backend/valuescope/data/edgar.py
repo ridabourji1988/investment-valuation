@@ -47,26 +47,68 @@ def company_name(ticker: str) -> str:
     return _ticker_table().get(ticker.upper(), (0, ticker))[1]
 
 
+class NoFilings(KeyError):
+    """Ticker is registered with the SEC but files no XBRL financials
+    (typically an unsponsored ADR shell, e.g. BMWKY). Subclasses KeyError so
+    the API maps it to an honest 404 rather than a source failure."""
+
+    def __str__(self) -> str:  # KeyError.__str__ would repr-quote the message
+        return self.args[0] if self.args else "no XBRL filings"
+
+
+# Tickers whose companyfacts 404'd this process — search greys them out
+# instead of offering an Analyze button that can only fail.
+NO_FACTS: set = set()
+
+
 def company_facts(ticker: str) -> dict:
     cik = cik_for_ticker(ticker)
-    return get_cached(f"edgar:facts:{cik}", _TTL_FACTS,
-                      lambda: http_get(FACTS_URL.format(cik=cik), headers=_headers(),
-                                       timeout=40).json())
+
+    def build():
+        try:
+            return http_get(FACTS_URL.format(cik=cik), headers=_headers(),
+                            timeout=40).json()
+        except Exception as e:
+            if "404" in str(e):
+                NO_FACTS.add(ticker.upper())
+                raise NoFilings(
+                    f"{ticker.upper()}: registered with the SEC but files no "
+                    "XBRL financial statements (likely an unsponsored ADR) — "
+                    "fundamentals cannot be sourced honestly")
+            raise
+    return get_cached(f"edgar:facts:{cik}", _TTL_FACTS, build)
 
 
 def company_profile(ticker: str) -> dict:
-    """Sector (SIC description) and exchange from the EDGAR submissions API."""
+    """Sector (SIC description), exchange and the latest annual-report filing
+    (with a direct sec.gov document link, so every number is verifiable at the
+    source) from the EDGAR submissions API."""
     cik = cik_for_ticker(ticker)
 
     def build():
         d = http_get(SUBMISSIONS_URL.format(cik=cik), headers=_headers(), timeout=30).json()
         exchanges = [e for e in (d.get("exchanges") or []) if e]
+        recent = (d.get("filings") or {}).get("recent") or {}
+        filing = None
+        for form, accn, filed, doc in zip(recent.get("form", []),
+                                          recent.get("accessionNumber", []),
+                                          recent.get("filingDate", []),
+                                          recent.get("primaryDocument", [])):
+            if str(form).startswith(_ANNUAL_FORMS) and accn and doc:
+                filing = {
+                    "form": form, "filed": filed,
+                    "url": f"https://www.sec.gov/Archives/edgar/data/{cik}/"
+                           f"{accn.replace('-', '')}/{doc}",
+                }
+                break  # recent[] is newest-first
         return {
             "sector": d.get("sicDescription") or "—",
             "exchange": exchanges[0] if exchanges else "US",
             "name": d.get("name") or company_name(ticker),
+            "cik": cik,
+            "filing": filing,
         }
-    return get_cached(f"edgar:profile:{cik}", _TTL_TICKERS, build)
+    return get_cached(f"edgar:profile2:{cik}", _TTL_TICKERS, build)
 
 
 # --------------------------------------------------------------------------- #

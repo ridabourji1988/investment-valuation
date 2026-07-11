@@ -17,10 +17,14 @@ from __future__ import annotations
 from . import alphavantage, cboe, fx, yahoo
 
 
-def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
+def price_and_history(ticker: str, *, rng: str = "10y") -> dict:
     """{"price", "currency", "history", "source"}. Yahoo first (it also tells
     us the listing currency, used to reject non-US$ listings); Cboe fallback
-    covers US listings only, so its currency is USD by construction."""
+    covers US listings only, so its currency is USD by construction.
+
+    Ten years by default: one cached fetch serves the current price, the full
+    Max-range chart and the beta regression."""
+    days = {"1y": 260, "2y": 505, "5y": 1260}.get(rng, 2520)
     try:
         c = yahoo.fetch_chart(ticker, rng=rng)
         px = c.get("price")
@@ -31,7 +35,7 @@ def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
         pass
     try:
         q = cboe.quote(ticker)
-        hist = cboe.history(ticker, days=260)
+        hist = cboe.history(ticker, days=days)
         return {"price": q["price"], "currency": "USD", "history": hist,
                 "source": "Cboe delayed quotes (15 min)"}
     except Exception as e_cboe:  # noqa: BLE001 — last resort, only with a key
@@ -39,7 +43,7 @@ def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
             raise
         try:
             q = alphavantage.quote(ticker)
-            hist = alphavantage.history(ticker, days=260)
+            hist = alphavantage.history(ticker, days=days)
             return {"price": q["price"], "currency": "USD", "history": hist,
                     "source": "Alpha Vantage (daily)"}
         except Exception as e_av:
@@ -53,9 +57,10 @@ def price_history(ticker: str) -> list[dict]:
 
 
 def _close_map(symbol: str, *, days: int) -> dict:
-    """{iso_date: close} through the source chain, for return alignment."""
+    """{iso_date: close} through the source chain, for return alignment.
+    Reuses the cached 10y fetch and slices the tail — no extra request."""
     try:
-        hist = yahoo.fetch_chart(symbol, rng="2y")["history"]
+        hist = yahoo.fetch_chart(symbol, rng="10y")["history"][-days:]
     except Exception:  # noqa: BLE001
         hist = cboe.history(symbol, days=days)
     return {row["date"]: row["close"] for row in hist if row.get("date")}

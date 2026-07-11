@@ -4,12 +4,25 @@ import { usd, pct, signedPct } from '../lib/format'
 import { T, verdictColor } from '../theme'
 import { Sparkline } from './Charts'
 
+const SORTS = {
+  mos: { label: 'Margin of safety', fn: (a, b) => b.margin_of_safety - a.margin_of_safety },
+  quality: { label: 'Quality', fn: (a, b) => b.quality - a.quality },
+  change: { label: 'Daily change', fn: (a, b) => chgOf(b) - chgOf(a) },
+  price: { label: 'Price', fn: (a, b) => b.price - a.price },
+  ticker: { label: 'A–Z', fn: (a, b) => a.ticker.localeCompare(b.ticker) },
+}
+const chgOf = (r) => (r.price - r.prev_close) / (r.prev_close || 1)
+
 export default function Feed({ onOpen, onMacro }) {
   const [feed, setFeed] = useState(null)
   const [brief, setBrief] = useState(null)
   const [q, setQ] = useState('')
   const [results, setResults] = useState(null)
   const [err, setErr] = useState(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const [sortBy, setSortBy] = useState('mos')
+  const [verdictF, setVerdictF] = useState('ALL')
+  const [hideLowDq, setHideLowDq] = useState(false)
   const debounce = useRef(null)
 
   const onQuery = (value) => {
@@ -48,9 +61,13 @@ export default function Feed({ onOpen, onMacro }) {
   )
 
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-  const rows = feed.rows.filter((r) =>
-    !q || r.ticker.toLowerCase().includes(q.toLowerCase()) ||
-    r.name.toLowerCase().includes(q.toLowerCase()))
+  const rows = feed.rows
+    .filter((r) =>
+      !q || r.ticker.toLowerCase().includes(q.toLowerCase()) ||
+      r.name.toLowerCase().includes(q.toLowerCase()))
+    .filter((r) => verdictF === 'ALL' || r.verdict === verdictF)
+    .filter((r) => !hideLowDq || r.data_quality !== 'low')
+    .sort(SORTS[sortBy].fn)
 
   return (
     <div>
@@ -60,8 +77,35 @@ export default function Feed({ onOpen, onMacro }) {
       <div className="toolbar">
         <input className="search" placeholder="Search any ticker or company (US, EU & EM via US listings)"
           value={q} onChange={(e) => onQuery(e.target.value)} />
-        <button className="pill-btn" title="Filters">···</button>
+        <button className={'pill-btn' + (showFilters ? ' on' : '')} title="Filters & sorting"
+          onClick={() => setShowFilters((v) => !v)}>≡</button>
       </div>
+
+      {showFilters && (
+        <div className="filterbar">
+          <div className="frow">
+            <span className="flabel">Sort</span>
+            {Object.entries(SORTS).map(([id, s]) => (
+              <span key={id} className={'tag' + (sortBy === id ? ' blue' : '')}
+                onClick={() => setSortBy(id)} role="button">{s.label}</span>
+            ))}
+          </div>
+          <div className="frow">
+            <span className="flabel">Verdict</span>
+            {['ALL', 'BUY', 'HOLD', 'SELL'].map((v) => (
+              <span key={v}
+                className={'tag' + (verdictF === v ? (v === 'BUY' ? ' green' : v === 'SELL' ? ' red' : ' blue') : '')}
+                onClick={() => setVerdictF(v)} role="button">{v === 'ALL' ? 'All' : v}</span>
+            ))}
+            <span className="flabel" style={{ marginLeft: 12 }}>Data</span>
+            <span className={'tag' + (hideLowDq ? ' amber' : '')}
+              onClick={() => setHideLowDq((v) => !v)} role="button">hide low quality</span>
+            <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>
+              {rows.length}/{feed.rows.length} shown
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Global search results */}
       {results && (

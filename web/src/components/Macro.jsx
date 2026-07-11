@@ -75,7 +75,11 @@ export default function Macro({ formulas }) {
           <div key={ind.id} className="row hairline" style={{ cursor: 'default' }}>
             <div className="row-main">
               <div className="row-ticker" style={{ fontSize: 15 }}>{ind.label}</div>
-              <div className="row-name">{ind.read}</div>
+              <div className="row-name">
+                {ind.read}
+                {ind.url && <> · <a href={ind.url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12 }}>{ind.source || 'source'} ↗</a></>}
+              </div>
             </div>
             <div className="tnum" style={{ fontWeight: 700 }}>
               {ind.unit === '%' ? pct(ind.value) : ind.unit === 'idx' ? num(ind.value, 1) : num(ind.value, 2)}

@@ -6,10 +6,14 @@ from .trace import CalculationTrace, inp, step
 
 
 def margin_of_safety(value: float, price: float, *, value_trace_id: str | None = None) -> CalculationTrace:
-    """MoS = (V - P) / V — Graham, The Intelligent Investor ch. 20."""
-    if value == 0:
-        raise ValueError("intrinsic value must be non-zero")
-    mos = (value - price) / value
+    """MoS = (V - P) / V — Graham, The Intelligent Investor ch. 20.
+
+    When the estimated value is zero or negative (a DCF can honestly conclude
+    the equity is worth nothing under its assumptions), the ratio flips sign
+    and explodes — so MoS is pinned at −100%: the price sits entirely above
+    value, with no cushion."""
+    capped = value <= 0
+    mos = -1.0 if capped else (value - price) / value
     spec = get_formula("margin_of_safety")
     return CalculationTrace(
         metric_id="margin_of_safety",
@@ -22,9 +26,13 @@ def margin_of_safety(value: float, price: float, *, value_trace_id: str | None =
             inp("V", value, "US$/share", "formula", "intrinsic value", "", value_trace_id),
             inp("P", price, "US$/share", "yfinance", "last close"),
         ],
-        steps=[step("Discount to value", f"({value:,.2f} − {price:,.2f}) ÷ {value:,.2f}", mos)],
+        steps=[step("Discount to value",
+                    f"({value:,.2f} − {price:,.2f}) ÷ {value:,.2f}"
+                    + (" → pinned at −100% (value ≤ 0)" if capped else ""), mos)],
         citation=spec.source_citation,
-        caveats=["A large margin of safety is only meaningful if the value estimate is sound."],
+        caveats=["A large margin of safety is only meaningful if the value estimate is sound."]
+        + (["The value estimate is zero or negative under current assumptions, "
+            "so MoS is pinned at −100%."] if capped else []),
     )
 
 

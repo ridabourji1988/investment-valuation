@@ -43,14 +43,15 @@ def search(query: str, *, limit: int = 8) -> list[dict]:
     out, seen = [], set()
     for hit in _edgar.search_tickers(query, limit=limit):
         seen.add(hit["ticker"])
-        out.append({**hit, "exchange": "", "analyzable": True})
+        out.append({**hit, "exchange": "",
+                    "analyzable": hit["ticker"] not in _edgar.NO_FACTS})
     try:
         for hit in yahoo.search(query, count=limit):
             tk = (hit["ticker"] or "").upper()
             if not tk or tk in seen:
                 continue
             seen.add(tk)
-            analyzable = _edgar.has_ticker(tk)
+            analyzable = _edgar.has_ticker(tk) and tk not in _edgar.NO_FACTS
             out.append({"ticker": tk, "name": hit["name"], "exchange": hit["exchange"],
                         "source": "yahoo", "analyzable": analyzable})
     except Exception:  # noqa: BLE001 — EDGAR-only results still useful

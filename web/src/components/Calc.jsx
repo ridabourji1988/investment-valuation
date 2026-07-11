@@ -6,7 +6,7 @@ import { InlineSeries } from './Charts'
 // registry, so any <Calc> can open its trace and drill into computed inputs.
 const CalcCtx = createContext(null)
 
-export function CalcProvider({ traces, formulas, children }) {
+export function CalcProvider({ traces, formulas, links, children }) {
   const [stack, setStack] = useState([]) // stack of metric ids (recursive drill-down)
 
   const open = useCallback((metricId) => {
@@ -17,7 +17,7 @@ export function CalcProvider({ traces, formulas, children }) {
   const closeAll = useCallback(() => setStack([]), [])
 
   return (
-    <CalcCtx.Provider value={{ traces, formulas, open }}>
+    <CalcCtx.Provider value={{ traces, formulas, links, open }}>
       {children}
       {stack.length > 0 && (
         <CalcSheet
@@ -88,8 +88,7 @@ function CalcSheet({ trace, depth, onBack, onClose }) {
                       </td>
                       <td className="tnum"><InputValue value={inp.value} unit={inp.unit} /></td>
                       <td className="src">
-                        {inp.source_type}{inp.source_ref ? ` · ${inp.source_ref}` : ''}
-                        {inp.asof ? ` (${inp.asof})` : ''}
+                        <SourceRef input={inp} links={ctx.links} />
                       </td>
                     </tr>
                   ))}
@@ -137,6 +136,17 @@ function CalcSheet({ trace, depth, onBack, onClose }) {
       </div>
     </div>
   )
+}
+
+// Source label with a verify-at-source link when the input came from a
+// linkable origin (SEC filing for edgar inputs, quote page for market data).
+function SourceRef({ input, links }) {
+  const text = `${input.source_type}${input.source_ref ? ` · ${input.source_ref}` : ''}${input.asof ? ` (${input.asof})` : ''}`
+  const url = input.source_type === 'edgar'
+    ? (links?.filing?.url || links?.filings_index)
+    : ['yfinance', 'market', 'price'].includes(input.source_type) ? links?.prices : null
+  if (!url) return <>{text}</>
+  return <a href={url} target="_blank" rel="noreferrer">{text} ↗</a>
 }
 
 function InputValue({ value, unit }) {

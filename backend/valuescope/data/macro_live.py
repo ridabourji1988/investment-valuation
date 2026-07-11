@@ -42,6 +42,26 @@ def _try(fn, *args):
         return None
 
 
+def _link_for(label: str) -> str | None:
+    """Verify-at-source URL for a series, derived from its source label."""
+    if label.startswith("FRED "):
+        series = label.split()[1].split("/")[0]
+        return f"https://fred.stlouisfed.org/series/{series}"
+    if label.startswith(("U.S. Treasury", "10Y − 3M", "3M T-bill")):
+        return ("https://home.treasury.gov/resource-center/data-chart-center/"
+                "interest-rates/TextView?type=daily_treasury_yield_curve")
+    if "^TNX" in label:
+        return "https://finance.yahoo.com/quote/%5ETNX"
+    if "^IRX" in label:
+        return "https://finance.yahoo.com/quote/%5EIRX"
+    if label.startswith("BLS "):
+        return f"https://data.bls.gov/timeseries/{label.split()[1]}"
+    if "HYG−IEF" in label:
+        return ("https://finance.yahoo.com/quote/HYG" if label.startswith("Yahoo")
+                else "https://www.cboe.com/delayed_quotes/hyg/")
+    return None
+
+
 def snapshot() -> dict:
     """Assemble the full macro dict. Raises only if BOTH sources fail for the
     essential series (10Y yield and unemployment)."""
@@ -125,4 +145,5 @@ def snapshot() -> dict:
         "fed_target_high": hi,
         "next_fomc": _next_fomc(today),
         "sources": sources,
+        "links": {k: _link_for(v) for k, v in sources.items()},
     }

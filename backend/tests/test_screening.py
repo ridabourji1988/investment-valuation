@@ -8,8 +8,10 @@ def test_margin_of_safety():
     assert abs(margin_of_safety(100, 75).result - 0.25) < 1e-12
     # Overvalued -> negative
     assert margin_of_safety(100, 120).result < 0
-    with pytest.raises(ValueError):
-        margin_of_safety(0, 10)
+    # Value <= 0: a DCF can honestly conclude the equity is worthless —
+    # MoS pins at -100% instead of exploding through the sign flip.
+    assert margin_of_safety(0, 10).result == -1.0
+    assert margin_of_safety(-1.75, 559.9).result == -1.0
 
 
 def test_ncav():

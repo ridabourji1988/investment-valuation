@@ -240,23 +240,30 @@ def macro_dashboard() -> dict:
         sahm_triggered=sahm.result["triggered"],
         credit_proxy_stress=credit_proxy.get("stress"),
     ))
+    links = m.get("links", {})
     indicators = [
         {"id": "DGS10", "label": "10Y Treasury", "value": m["dgs10"], "unit": "%",
-         "read": "Discount-rate anchor for every valuation."},
+         "read": "Discount-rate anchor for every valuation.",
+         "source": m["sources"].get("dgs10"), "url": links.get("dgs10")},
         {"id": "T10Y3M", "label": "Yield curve (10Y−3M)", "value": m["t10y3m"], "unit": "%",
-         "read": "Negative warns of recession risk."},
+         "read": "Negative warns of recession risk.",
+         "source": m["sources"].get("t10y3m"), "url": links.get("t10y3m")},
         {"id": "IPMAN", "label": "Industrial production (YoY)", "value": m.get("ip_yoy"),
-         "unit": "%", "read": "Below zero signals factory contraction."},
+         "unit": "%", "read": "Below zero signals factory contraction.",
+         "source": m["sources"].get("ip_yoy"), "url": links.get("ip_yoy")},
         {"id": "HYOAS", "label": "High-yield spread",
          "value": m.get("hy_oas") if m.get("hy_oas") is not None
          else credit_proxy.get("hyg_minus_ief_3m"),
          "unit": "%", "read": "Wider spreads mean credit stress."
-         if m.get("hy_oas") is not None else "HYG−IEF 3-month proxy; strongly negative means stress."},
+         if m.get("hy_oas") is not None else "HYG−IEF 3-month proxy; strongly negative means stress.",
+         "source": m["sources"].get("credit"), "url": links.get("credit")},
         {"id": "UNRATE", "label": "Unemployment",
          "value": m["unemployment_monthly"][-1] / 100.0,
-         "unit": "%", "read": "Feeds the Sahm recession rule."},
+         "unit": "%", "read": "Feeds the Sahm recession rule.",
+         "source": m["sources"].get("unemployment"), "url": links.get("unemployment")},
         {"id": "CPI", "label": "CPI (YoY)", "value": m.get("cpi_yoy"), "unit": "%",
-         "read": "Drives the Fed's rate path."},
+         "read": "Drives the Fed's rate path.",
+         "source": m["sources"].get("cpi"), "url": links.get("cpi")},
     ]
     data = _stamp({
         "asof": m["asof"],

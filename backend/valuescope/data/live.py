@@ -172,12 +172,36 @@ def _listing_shares(ticker: str, facts: dict, currency: str, *,
     return sh, src
 
 
+def _source_links(ticker: str, profile: dict, price_source: str,
+                  currency: str) -> dict:
+    """Verify-at-source URLs: the exact annual report on sec.gov, the raw XBRL
+    facts, and the quote page of whichever price source served this ticker."""
+    cik = profile.get("cik")
+    if price_source.startswith("Cboe"):
+        prices = f"https://www.cboe.com/delayed_quotes/{ticker.lower()}/"
+    elif price_source.startswith("Alpha"):
+        prices = "https://www.alphavantage.co/"
+    else:
+        prices = f"https://finance.yahoo.com/quote/{ticker}"
+    links = {
+        "filing": profile.get("filing"),  # {"form","filed","url"} | None
+        "filings_index": (f"https://www.sec.gov/cgi-bin/browse-edgar?action="
+                          f"getcompany&CIK={cik}&type=10-K&count=10" if cik else None),
+        "xbrl_data": (f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+                      if cik else None),
+        "prices": prices,
+    }
+    if currency != "USD":
+        links["fx"] = f"https://finance.yahoo.com/quote/{currency}USD=X"
+    return links
+
+
 def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     """Assemble a fully live CompanyInputs. Raises on missing essentials."""
     ticker = ticker.upper()
     facts = edgar.company_facts(ticker)
     profile = edgar.company_profile(ticker)
-    chart = market.price_and_history(ticker, rng="1y")
+    chart = market.price_and_history(ticker)
     price = chart["price"]
     if not price or price <= 0:
         raise ValueError(f"{ticker}: no market price")
@@ -353,6 +377,7 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
             "beta": "2Y daily regression vs S&P 500",
             "shares": shares_source,
         },
+        links=_source_links(ticker, profile, chart["source"], currency),
         asof=rev_s[-1][0],
     )
 

@@ -65,6 +65,7 @@ class CompanyInputs:
     magic_nfa: float = 0.0
 
     sources: dict = field(default_factory=dict)
+    links: dict = field(default_factory=dict)   # verify-at-source URLs
     asof: str = ""
 
 
@@ -178,6 +179,7 @@ def analyze(c: CompanyInputs, *, mc_runs: int = 10_000, regime_reduce: float = 1
         "data_quality": c.data_quality,
         "idea_category": c.idea_category,
         "sources": c.sources,
+        "links": c.links,
         "asof": c.asof,
         "dcf_assumptions": asdict(assumptions),
         "traces": {k: t.to_dict() for k, t in traces.items()},

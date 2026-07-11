@@ -76,7 +76,9 @@ DEFAULT_UNIVERSE = [
     "MC.PA", "RMS.PA", "OR.PA", "AIR.PA", "SU.PA", "KER.PA", "DSY.PA",
     "EL.PA", "ML.PA", "RI.PA", "AI.PA", "SAF.PA", "DG.PA", "BN.PA",
     "HO.PA", "SGO.PA", "LR.PA", "CAP.PA", "PUB.PA", "ORA.PA", "VIE.PA",
-    "SW.PA", "AC.PA", "CA.PA", "BVI.PA",
+    "SW.PA", "AC.PA", "CA.PA", "BVI.PA", "ENGI.PA", "EDEN.PA", "ERF.PA",
+    # TEP.PA (Teleperformance) searchable only: output failed the
+    # plausibility screen (model rejects the market's AI-disruption discount).
     "ADYEN.AS", "HEIA.AS", "AKZA.AS", "RAND.AS", "JDEP.AS", "UMG.AS",
     "ASM.AS", "WKL.AS", "AD.AS",
 ]

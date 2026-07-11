@@ -23,15 +23,19 @@ def list_tickers() -> list[str]:
     compose with plain tickers: VALUESCOPE_UNIVERSE="SP500,EU,TM"."""
     out: list[str] = []
     for t in config.UNIVERSE:
-        if t in ("SP500", "S&P500"):
+        if t in ("SP500", "S&P500", "NASDAQ100", "NDX"):
+            fetch = (indexes.sp500_tickers if t.startswith("S")
+                     else indexes.nasdaq100_tickers)
             try:
-                out.extend(indexes.sp500_tickers())
+                out.extend(fetch())
             except Exception:  # noqa: BLE001 — list source down: honest fallback
-                print("WARNING: S&P 500 constituents unavailable — "
+                print(f"WARNING: {t} constituents unavailable — "
                       "falling back to the curated default universe")
                 out.extend(DEFAULT_UNIVERSE)
         elif t == "EU":
             out.extend(x for x in DEFAULT_UNIVERSE if "." in x)
+        elif t == "CAC40":
+            out.extend(indexes.CAC40)
         else:
             out.append(t)
     seen: set = set()

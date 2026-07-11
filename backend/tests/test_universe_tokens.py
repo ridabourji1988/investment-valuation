@@ -47,3 +47,21 @@ def test_financials_and_real_estate_excluded():
     rows = indexes.parse_constituents(_HTML)
     kept = [t for t, s in rows if s not in ("Financials", "Real Estate")]
     assert "BRK-B" not in kept and "PLD" not in kept and "AAPL" in kept
+
+
+def test_nasdaq100_token_uses_nasdaq_list(monkeypatch):
+    monkeypatch.setattr(config, "UNIVERSE", ["NASDAQ100"])
+    monkeypatch.setattr(indexes, "nasdaq100_tickers", lambda: ["AAPL", "NVDA"])
+    assert provider.list_tickers() == ["AAPL", "NVDA"]
+
+
+def test_cac40_token_is_fully_analyzable(monkeypatch):
+    from valuescope.data import esef
+    monkeypatch.setattr(config, "UNIVERSE", ["CAC40"])
+    out = provider.list_tickers()
+    assert out == indexes.CAC40
+    for t in out:
+        # every EU-suffixed member must be in the ESEF registry; the rest
+        # are US-listed ADR symbols (plain tickers)
+        if "." in t:
+            assert t in esef.REGISTRY, t

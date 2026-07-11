@@ -72,3 +72,10 @@
 **Alternatives considered**: full ESEF auto-discovery (any filer on demand via LEI→ISIN→price) — needs ISIN-based price resolution; deferred to backlog.
 **Outcome**: PENDING (Railway verification after deploy)
 **Lesson**: GLEIF fulltext finds subsidiaries; ISIN finds the issuer. Screen every mechanically-added name empirically before it ships.
+
+### 2026-07-11 Decision: NASDAQ100 + CAC40 universe tokens
+**Context**: User asked "what about nasdaq? cac40?" after SP500/EU tokens shipped.
+**Choice**: NASDAQ100 from api.nasdaq.com (official, keyless; index excludes financials by design). CAC40 as a curated analyzable mapping (27 ESEF home listings incl. newly verified Engie/Edenred/Eurofins + ADRs TTE/SNY/MT). Every candidate empirically screened: Teleperformance (4.3x), STMicro (0.16x), Stellantis (5.2x) failed plausibility — searchable but not scanned; financials/Unibail/Renault/Bouygues excluded on principle.
+**Alternatives considered**: Nasdaq Composite (~3000 names — not a scan, search covers it); Wikipedia for Nasdaq-100 (components table no longer parseable).
+**Outcome**: PENDING (Railway verification)
+**Lesson**: the plausibility screen (0.2x–3x fair/price) is now the standard admission gate for any mechanically-added name; deep cyclicals keep failing it → cycle normalization is the highest-leverage backlog item.

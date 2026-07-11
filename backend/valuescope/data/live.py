@@ -49,7 +49,7 @@ KNOWN_ADR_RATIOS = {
     "AZN": 0.5, "NVS": 1.0, "GSK": 2.0, "SNY": 0.5, "TTE": 1.0, "BP": 6.0,
     "RIO": 1.0, "DEO": 4.0, "BTI": 1.0, "ERIC": 1.0, "NOK": 1.0, "TM": 10.0,
     "SE": 1.0, "BIDU": 8.0, "JD": 2.0, "PDD": 4.0, "NTES": 5.0, "TCOM": 1.0,
-    "PBR": 2.0, "BHP": 2.0,
+    "PBR": 2.0, "BHP": 2.0, "STM": 1.0, "STLA": 1.0, "MT": 1.0,
 }
 
 # XBRL concept candidates, in preference order — us-gaap then ifrs-full names

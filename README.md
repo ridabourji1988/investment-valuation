@@ -119,6 +119,8 @@ expansion tokens, composable:
 |---|---|
 | *(unset)* | curated ~130-name default |
 | `SP500,EU` | current S&P 500 (ex-financials/real-estate, ~400 names) + European ESEF names |
+| `NASDAQ100` | current Nasdaq-100 (official Nasdaq API, no financials by design) |
+| `CAC40` | analyzable CAC 40 members (ESEF home listings + US ADRs; financials/deep cyclicals excluded) |
 | `SP500,EU,TSM,BABA` | tokens plus any extra tickers |
 | `AAPL,MC.PA` | fully custom list |
 

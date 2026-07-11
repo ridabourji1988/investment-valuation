@@ -52,3 +52,39 @@ def sp500_tickers() -> list[str]:
             raise ValueError(f"S&P 500 parse found only {len(rows)} rows")
         return [t for t, sector in rows if sector not in _EXCLUDED_SECTORS]
     return get_cached("indexes:sp500", _TTL, build)
+
+
+_NDX_URL = "https://api.nasdaq.com/api/quote/list-type/nasdaq100"
+
+
+def nasdaq100_tickers() -> list[str]:
+    """Current Nasdaq-100 constituents from Nasdaq's own API, cached a week.
+    The index excludes financial companies by design, so no sector filter."""
+    def build():
+        d = http_get(_NDX_URL, timeout=30, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Accept": "application/json"}).json()
+        rows = (((d.get("data") or {}).get("data") or {}).get("rows")) or []
+        out = [str(r["symbol"]).strip().replace(".", "-").replace("/", "-")
+               for r in rows if r.get("symbol")]
+        if len(out) < 90:
+            raise ValueError(f"Nasdaq-100 API returned only {len(out)} rows")
+        return out
+    return get_cached("indexes:nasdaq100", _TTL, build)
+
+
+# CAC 40 members mapped to their analyzable symbol: home listing for ESEF
+# names, the US ADR for SEC filers (TotalEnergies=TTE, Sanofi=SNY,
+# ArcelorMittal=MT). Deliberately excluded: AXA/BNP/Société Générale/
+# Crédit Agricole (financials), Unibail-Rodamco (REIT), Renault (captive
+# finance arm, like Toyota), Bouygues (its ESEF filing tags no share count),
+# and Teleperformance/STMicro/Stellantis (deep-cyclical or narrative-gap
+# outputs failed the plausibility screen — all searchable on demand;
+# cycle-normalized margins on the backlog will readmit them).
+CAC40 = [
+    "AC.PA", "AI.PA", "AIR.PA", "BN.PA", "BVI.PA", "CA.PA", "CAP.PA",
+    "DG.PA", "DSY.PA", "EDEN.PA", "EL.PA", "ENGI.PA", "ERF.PA", "HO.PA",
+    "KER.PA", "LR.PA", "MC.PA", "ML.PA", "OR.PA", "ORA.PA", "PUB.PA",
+    "RI.PA", "RMS.PA", "SAF.PA", "SGO.PA", "SU.PA", "VIE.PA",
+    "TTE", "SNY", "MT",
+]

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from ..config import config
 from ..engine.analyze import CompanyInputs
-from . import live, macro_live, yahoo
+from . import live, macro_live, market, yahoo
 from .cache import get_cached
 
 _TTL_COMPANY = 15 * 60   # price freshness; EDGAR layer caches facts 12h anyway
@@ -33,7 +33,7 @@ def get_company(ticker: str) -> CompanyInputs:
 
 
 def get_price_history(ticker: str) -> list[dict]:
-    return yahoo.fetch_chart(ticker.upper(), rng="1y")["history"]
+    return market.price_history(ticker.upper())
 
 
 def search(query: str, *, limit: int = 8) -> list[dict]:

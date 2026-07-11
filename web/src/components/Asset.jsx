@@ -10,6 +10,14 @@ import { Disclaimer } from './Feed'
 // Trading-day counts to slice from the tail of the daily history series.
 const RANGES = { '1W': 5, '1M': 22, '3M': 66, '6M': 130, '1Y': Infinity }
 
+function friendlyError(msg) {
+  if (/rate.?limit|circuit breaker|429/i.test(msg))
+    return 'The market-data source is rate-limiting this network right now. It recovers on its own — the system retries automatically, so try again in a few minutes. Numbers are never simulated.'
+  if (/no sec|unknown ticker|not found/i.test(msg))
+    return 'This company has no SEC filings, so it cannot be analyzed — ValueScope never fakes fundamentals.'
+  return 'A live data source failed for this company. The system retries automatically — try again shortly.'
+}
+
 export default function Asset({ ticker, formulas, onClose }) {
   const [a, setA] = useState(null)
   const [narr, setNarr] = useState(null)
@@ -22,7 +30,18 @@ export default function Asset({ ticker, formulas, onClose }) {
     api.narrative(ticker).then(setNarr).catch(() => {})
   }, [ticker])
 
-  if (err) return <Modal onClose={onClose}><div className="loading">Error: {err}</div></Modal>
+  if (err) return (
+    <Modal onClose={onClose}>
+      <div style={{ padding: '8px 16px 24px' }}>
+        <div style={{ fontSize: 26, fontWeight: 800 }}>{ticker}</div>
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="eyebrow" style={{ color: T.amber }}>Live data unavailable</div>
+          <div className="lead">{friendlyError(err)}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>{err}</div>
+        </div>
+      </div>
+    </Modal>
+  )
   if (!a) return <Modal onClose={onClose}><div className="loading">Valuing {ticker}…</div></Modal>
 
   const chg = a.margin_of_safety

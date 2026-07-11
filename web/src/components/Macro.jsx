@@ -8,10 +8,32 @@ import { Disclaimer } from './Feed'
 export default function Macro({ formulas }) {
   const [m, setM] = useState(null)
   const [rs, setRs] = useState(null)
+  const [err, setErr] = useState(null)
   useEffect(() => {
-    api.macro().then(setM).catch(() => {})
-    api.rateSensitivity(50).then(setRs).catch(() => {})
+    let timer
+    const load = () => {
+      api.macro().then((d) => { setErr(null); setM(d) })
+        .catch((e) => { setErr(e.message); timer = setTimeout(load, 30000) })
+      api.rateSensitivity(50).then(setRs).catch(() => {})
+    }
+    load()
+    return () => clearTimeout(timer)
   }, [])
+  if (err && !m) return (
+    <div>
+      <div className="title-lg">Macro &amp; Cycle</div>
+      <div className="card">
+        <div className="eyebrow" style={{ color: T.amber }}>Macro sources unavailable</div>
+        <div className="lead">
+          Live macro series (Treasury yields, unemployment, CPI) can&apos;t be fetched from
+          this network right now — usually a temporary rate limit. This page retries
+          automatically every 30 seconds; nothing is ever simulated.
+        </div>
+        <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>{err}</div>
+      </div>
+      <Disclaimer />
+    </div>
+  )
   if (!m) return <div className="loading">Loading macro…</div>
 
   const traces = { sahm: m.sahm, regime: m.regime }

@@ -38,17 +38,25 @@ class YahooUnavailable(RuntimeError):
     pass
 
 
-def _guarded_get(url: str, **kw):
+def _strike() -> None:
+    _BREAKER["strikes"] += 1
+    if _BREAKER["strikes"] >= 3:
+        _BREAKER["down_until"] = _time.time() + _BREAKER_WINDOW
+        _BREAKER["strikes"] = 0
+
+
+def _check_breaker() -> None:
     if _time.time() < _BREAKER["down_until"]:
         raise YahooUnavailable("Yahoo circuit breaker open (rate-limited)")
+
+
+def _guarded_get(url: str, **kw):
+    _check_breaker()
     try:
         r = http_get(url, **kw)
     except Exception as e:
         if "429" in str(e):
-            _BREAKER["strikes"] += 1
-            if _BREAKER["strikes"] >= 3:
-                _BREAKER["down_until"] = _time.time() + _BREAKER_WINDOW
-                _BREAKER["strikes"] = 0
+            _strike()
         raise
     _BREAKER["strikes"] = 0
     return r
@@ -186,11 +194,14 @@ def _crumb_session() -> tuple[dict, str]:
     """Cookie+crumb pair for the quote API. Cached; raises when Yahoo
     rate-limits the handshake (callers must degrade gracefully)."""
     def build():
+        _check_breaker()  # don't poke Yahoo while boxed — the penalty re-arms
         with httpx.Client(headers=_HEADERS, timeout=20, follow_redirects=True) as c:
             c.get("https://fc.yahoo.com")
             r = c.get("https://query1.finance.yahoo.com/v1/test/getcrumb")
             crumb = r.text.strip()
             if r.status_code != 200 or not crumb or "<" in crumb:
+                if r.status_code == 429:
+                    _strike()
                 raise ValueError(f"crumb handshake failed ({r.status_code})")
             return dict(c.cookies), crumb
     return get_cached("yahoo:crumb", _TTL_QUOTE, build)

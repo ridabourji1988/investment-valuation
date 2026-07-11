@@ -58,6 +58,14 @@ def get_feed() -> dict:
 @app.get("/api/brief")
 def get_brief() -> dict:
     f = service.feed()
+    if f["count"] == 0:
+        # Empty scan: nothing to narrate — skip the AI call entirely.
+        reason = ("the first scan is still running" if f["warming"]
+                  else "market data sources are unavailable right now")
+        return {"payload": {"ideas": 0}, "block": {
+            "text": f"No companies are ready yet — {reason}. Scanning resumes "
+                    "automatically and results appear here as soon as live data flows.",
+            "source": "engine", "ai": False}}
     scan = {
         "count": f["count"],
         "buys": f["buys"],
@@ -110,7 +118,10 @@ def search(q: str) -> dict:
 
 @app.get("/api/macro")
 def get_macro() -> dict:
-    return service.macro_dashboard()
+    try:
+        return service.macro_dashboard()
+    except Exception as e:  # noqa: BLE001 — live sources down; report, never fake
+        raise HTTPException(status_code=503, detail=f"macro sources unavailable: {e}")
 
 
 @app.get("/api/macro/rate-sensitivity")

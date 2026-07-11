@@ -94,10 +94,13 @@ def _warm_all() -> None:
 
 def _watchdog_loop() -> None:
     """Self-healing: retry tickers that failed (source outage, rate limit)
-    every 5 minutes, forever. Autonomy means failures recover without anyone
-    touching anything."""
+    every 5 minutes, forever — first check after 1 minute so short outages
+    recover fast. Autonomy means failures recover without anyone touching
+    anything."""
+    delay = 60
     while True:
-        time.sleep(300)
+        time.sleep(delay)
+        delay = 300
         try:
             missing = [t for t in provider.list_tickers() if peek_analysis(t) is None]
             for t in missing:

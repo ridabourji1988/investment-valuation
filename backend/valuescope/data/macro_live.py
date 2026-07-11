@@ -5,19 +5,20 @@ source label so the UI can show exactly where a number came from. Nothing is
 ever synthesised: a series with no reachable source is reported as None and
 downstream signals treat it as "unavailable", never as a made-up value.
 
-  dgs10        FRED DGS10            -> Yahoo ^TNX/10
-  t10y3m       FRED T10Y3M           -> Yahoo (^TNX - ^IRX)/10
+  dgs10        FRED DGS10            -> US Treasury yield curve -> Yahoo ^TNX
+  t10y3m       FRED T10Y3M           -> Treasury/Yahoo 10Y − 3M
   unemployment FRED UNRATE           -> BLS LNS14000000 (public API v1)
-  hy_oas       FRED BAMLH0A0HYM2     -> None (credit proxy: HYG vs IEF 3m return)
+  hy_oas       FRED BAMLH0A0HYM2     -> None (credit proxy: HYG vs IEF 3m
+                                         return, Yahoo -> Cboe delayed)
   ip_yoy       FRED IPMAN YoY        -> None (signal skipped)
   cpi_yoy      FRED CPIAUCSL YoY     -> BLS CUUR0000SA0 YoY
-  fed target   FRED DFEDTARU/DFEDTARL-> Yahoo ^IRX (3M-bill proxy, labelled)
+  fed target   FRED DFEDTARU/DFEDTARL-> 3M T-bill proxy (Treasury/Yahoo)
 """
 from __future__ import annotations
 
 import datetime as dt
 
-from . import bls, fred, yahoo
+from . import bls, fred, market, treasury, yahoo
 
 # Public FOMC calendar (reference data, not market data).
 FOMC_DATES = [
@@ -50,6 +51,8 @@ def snapshot() -> dict:
     dgs10 = _try(lambda: fred.latest("DGS10")[1] / 100.0)
     if dgs10 is not None:
         sources["dgs10"] = "FRED DGS10"
+    elif (dgs10 := _try(treasury.yield_10y)) is not None:
+        sources["dgs10"] = "U.S. Treasury daily par yield curve"
     else:
         dgs10 = yahoo.yield_10y()  # raises if also unreachable — genuinely stuck
         sources["dgs10"] = "Yahoo ^TNX (10Y yield)"
@@ -59,9 +62,10 @@ def snapshot() -> dict:
     if t10y3m is not None:
         sources["t10y3m"] = "FRED T10Y3M"
     else:
-        t3m = _try(yahoo.yield_3m)
+        t3m = _try(treasury.yield_3m) or _try(yahoo.yield_3m)
         t10y3m = (dgs10 - t3m) if t3m is not None else None
-        sources["t10y3m"] = "Yahoo ^TNX−^IRX" if t10y3m is not None else "unavailable"
+        sources["t10y3m"] = ("10Y − 3M (Treasury/market data)"
+                             if t10y3m is not None else "unavailable")
 
     # Unemployment (Sahm rule needs >= 15 monthly points); essential.
     unemployment = _try(lambda: fred.last_n("UNRATE", 15))
@@ -77,8 +81,8 @@ def snapshot() -> dict:
     if hy_oas is not None:
         sources["credit"] = "FRED BAMLH0A0HYM2 (HY OAS)"
     else:
-        credit_proxy = _try(yahoo.credit_stress_proxy)
-        sources["credit"] = ("Yahoo HYG−IEF 3-month proxy" if credit_proxy is not None
+        credit_proxy = _try(market.credit_stress_proxy)
+        sources["credit"] = (credit_proxy["source"] if credit_proxy is not None
                              else "unavailable")
 
     # Industrial production YoY (manufacturing-cycle signal)
@@ -99,10 +103,10 @@ def snapshot() -> dict:
     if lo is not None and hi is not None:
         sources["fed"] = "FRED DFEDTARL/DFEDTARU"
     else:
-        t3m = _try(yahoo.yield_3m)
+        t3m = _try(treasury.yield_3m) or _try(yahoo.yield_3m)
         if t3m is not None:
             lo, hi = round(t3m - 0.00125, 4), round(t3m + 0.00125, 4)
-            sources["fed"] = "Yahoo ^IRX (3M-bill proxy for the policy rate)"
+            sources["fed"] = "3M T-bill proxy for the policy rate"
         else:
             lo = hi = None
             sources["fed"] = "unavailable"

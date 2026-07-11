@@ -21,14 +21,19 @@ export default function Feed({ onOpen, onMacro }) {
     }, 300)
   }
 
+  const briefFor = useRef(-1)
   useEffect(() => {
     let timer
     const load = () => api.feed().then((f) => {
       setFeed(f)
-      // First scan of the universe runs in the background at startup —
-      // poll until every ticker has been attempted.
+      // Poll fast during the first scan, slower while tickers are missing
+      // (source outages self-heal server-side) — the page recovers on its own.
       if (f.warming) timer = setTimeout(load, 4000)
-      else api.brief().then(setBrief).catch(() => {})
+      else if (f.count < f.universe) timer = setTimeout(load, 30000)
+      if (!f.warming && briefFor.current !== f.count) {
+        briefFor.current = f.count
+        api.brief().then(setBrief).catch(() => {})
+      }
     }).catch((e) => setErr(e.message))
     load()
     return () => clearTimeout(timer)
@@ -99,11 +104,27 @@ export default function Feed({ onOpen, onMacro }) {
           </div>
         </div>
       )}
-      {Object.keys(feed.failed || {}).length > 0 && !feed.warming && (
+      {/* Everything failed: a real explanation beats a wall of tickers */}
+      {!feed.warming && feed.count === 0 && Object.keys(feed.failed || {}).length > 0 && (
+        <div className="card">
+          <div className="eyebrow" style={{ color: T.amber }}>Market data source rate-limited</div>
+          <div className="lead">
+            The price source (Yahoo Finance) is rate-limiting this network, so no company
+            can be valued right now. Nothing is broken — the scanner retries automatically
+            every few minutes and this page refreshes itself when data flows again.
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            SEC filings are unaffected. ValueScope never shows simulated numbers.
+          </div>
+        </div>
+      )}
+      {!feed.warming && feed.count > 0 && Object.keys(feed.failed || {}).length > 0 && (
         <div className="row hairline" style={{ cursor: 'default' }}>
           <div className="row-main">
             <div className="row-name">
-              Skipped (source unavailable): {Object.keys(feed.failed).join(', ')}
+              Skipped (source unavailable, auto-retrying):{' '}
+              {Object.keys(feed.failed).slice(0, 8).join(', ')}
+              {Object.keys(feed.failed).length > 8 ? ` +${Object.keys(feed.failed).length - 8} more` : ''}
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ data_quality is downgraded — the engine never invents the missing input.
 """
 from __future__ import annotations
 
+import math
 import statistics
 
 from ..engine.analyze import CompanyInputs
@@ -28,7 +29,7 @@ from ..engine.quality import (
     beneish_m_score, piotroski_f_score,
 )
 from ..engine.verdict import ValueTrapInputs
-from . import edgar, yahoo
+from . import edgar, market, yahoo
 
 # Damodaran implied US equity risk premium — reference constant, reviewed with
 # releases (https://pages.stern.nyu.edu/~adamodar/, "Implied ERP").
@@ -117,30 +118,48 @@ class _Money:
         return (v[-2], v[-1]) if len(v) >= 2 else None
 
 
-def _listing_shares(ticker: str, facts: dict, currency: str) -> tuple[float, str]:
+def _listing_shares(ticker: str, facts: dict, currency: str, *,
+                    price: float, ni_usd: float | None) -> tuple[float, str]:
     """Share count consistent with the LISTING price.
 
     EDGAR reports ordinary shares; for depositary receipts the listing trades
-    ADSs, so the ordinary count must be divided by the ADR ratio. Preference:
-    Yahoo's listing share count (already ADS-equivalent) -> EDGAR ÷ known
-    ratio -> EDGAR as-is (domestic filers)."""
+    ADSs, so the ordinary count usually needs dividing by the ADR ratio — but
+    some foreign filers' share tag is ALREADY the ADS count (BABA), so the
+    unit is genuinely ambiguous. When positive net income is available, the
+    implied P/E identifies the right unit deterministically: candidates differ
+    by exactly the ADR ratio (2-8x), so the one closest in log space to a
+    typical market multiple (~15x) wins. Otherwise preference order applies:
+    Yahoo listing count (ADS-equivalent) -> EDGAR ÷ known ratio -> EDGAR
+    as-is."""
     edgar_shares = edgar.shares_outstanding(facts)
     yahoo_shares = yahoo.listing_shares(ticker)
-    if yahoo_shares:
-        # Guard against unit disagreements: trust Yahoo when it's within 20x
-        # of EDGAR either way (it always is for sane listings).
-        if not edgar_shares or 0.05 < yahoo_shares / edgar_shares < 20:
-            return yahoo_shares, "Yahoo listing share count"
+
+    candidates: list[tuple[float, str]] = []
+    # Guard against unit disagreements: trust Yahoo when it's within 20x of
+    # EDGAR either way (it always is for sane listings).
+    if yahoo_shares and (not edgar_shares or 0.05 < yahoo_shares / edgar_shares < 20):
+        candidates.append((yahoo_shares, "Yahoo listing share count"))
     if edgar_shares and ticker in KNOWN_ADR_RATIOS:
-        return edgar_shares / KNOWN_ADR_RATIOS[ticker], \
-            f"EDGAR ÷ ADR ratio {KNOWN_ADR_RATIOS[ticker]:.0f}"
+        candidates.append((edgar_shares / KNOWN_ADR_RATIOS[ticker],
+                           f"EDGAR ÷ ADR ratio {KNOWN_ADR_RATIOS[ticker]:.0f}"))
     if edgar_shares:
-        if currency != "USD":
-            raise ValueError(
-                f"{ticker}: foreign filer with unknown ADR ratio and no listing "
-                "share count — refusing to guess the per-share denominator")
-        return edgar_shares, "EDGAR dei shares outstanding"
-    raise ValueError(f"{ticker}: no share count available")
+        candidates.append((edgar_shares, "EDGAR shares outstanding"))
+    if not candidates:
+        raise ValueError(f"{ticker}: no share count available")
+
+    if ni_usd and ni_usd > 0:
+        scored = sorted(
+            (abs(math.log(price * sh / ni_usd / 15.0)), sh, src)
+            for sh, src in candidates if 1.0 < price * sh / ni_usd < 500.0)
+        if scored:
+            return scored[0][1], scored[0][2]
+
+    sh, src = candidates[0]
+    if currency != "USD" and ticker not in KNOWN_ADR_RATIOS and src.startswith("EDGAR"):
+        raise ValueError(
+            f"{ticker}: foreign filer with unknown ADR ratio and no listing "
+            "share count — refusing to guess the per-share denominator")
+    return sh, src
 
 
 def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
@@ -148,7 +167,7 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     ticker = ticker.upper()
     facts = edgar.company_facts(ticker)
     profile = edgar.company_profile(ticker)
-    chart = yahoo.fetch_chart(ticker, rng="1y")
+    chart = market.price_and_history(ticker, rng="1y")
     price = chart["price"]
     if not price or price <= 0:
         raise ValueError(f"{ticker}: no market price")
@@ -161,7 +180,7 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     if len(rev_raw) < 2 or currency is None:
         raise ValueError(f"{ticker}: EDGAR lacks XBRL revenue "
                          "(bank/new entity/non-SEC filer?)")
-    fx = yahoo.fx_to_usd(currency)
+    fx = market.fx_to_usd(currency)
     money = _Money(facts, currency, fx)
     rev_s = [(end, v * fx) for end, v in rev_raw]
 
@@ -191,7 +210,9 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         raise ValueError(f"{ticker}: implausible operating margin "
                          f"{ebit / revenue:.0%} — inconsistent XBRL series")
 
-    shares, shares_source = _listing_shares(ticker, facts, currency)
+    shares, shares_source = _listing_shares(
+        ticker, facts, currency,
+        price=price, ni_usd=money.latest(NET_INCOME, flow=True))
     market_cap = price * shares
 
     # ---- capital structure --------------------------------------------------
@@ -207,7 +228,7 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     pretax = money.latest(PRETAX, flow=True)
     tax_rate = _clamp(tax / pretax, 0.10, 0.35) if (tax and pretax and pretax > 0) else 0.21
 
-    beta_levered = yahoo.regression_beta(ticker)          # observed vs S&P 500
+    beta_levered = market.regression_beta(ticker)         # observed vs S&P 500
     beta_u = unlever_beta(beta_levered, tax_rate, debt_to_equity)
 
     interest = money.latest(INTEREST, flow=True)
@@ -303,8 +324,8 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         magic_nfa=ppe or 0.0,
         sources={
             "fundamentals": fundamentals_src,
-            "prices": "Yahoo Finance (live)",
-            "beta": "2Y daily regression vs S&P 500 (Yahoo)",
+            "prices": chart["source"],
+            "beta": "2Y daily regression vs S&P 500",
             "shares": shares_source,
         },
         asof=rev_s[-1][0],

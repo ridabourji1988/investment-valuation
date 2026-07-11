@@ -16,5 +16,11 @@
 - Unsponsored ADRs (BMWKY) have a CIK but no XBRL → honest 404 + greyed search.
 - Local test server: port 8015; OPENROUTER_API_KEY + ALPHAVANTAGE_API_KEY set
   via env only (never committed). Railway needs them in Variables.
+- Production URL: https://investment.up.railway.app — queryable directly
+  (/api/health, /api/feed) to diagnose prod without user screenshots.
+- 2026-07-11 prod outage cause: user set VALUESCOPE_UNIVERSE=10000 in Railway
+  (meant for MC_RUNS) → universe = one fake ticker → zero data, looked like
+  rate-limiting. config.py now drops non-ticker tokens and falls back to the
+  default universe; the variable should still be deleted in Railway.
 - PRD source: the original requirements doc from session 1 (PRD.md/SPECS.md
   still to be distilled from it).

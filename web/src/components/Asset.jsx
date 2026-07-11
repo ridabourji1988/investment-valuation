@@ -7,7 +7,8 @@ import { CalcProvider, Calc } from './Calc'
 import { valuePerShare } from '../lib/dcf'
 import { Disclaimer } from './Feed'
 
-const RANGES = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '2Y']
+// Trading-day counts to slice from the tail of the daily history series.
+const RANGES = { '1W': 5, '1M': 22, '3M': 66, '6M': 130, '1Y': 260, 'All': Infinity }
 
 export default function Asset({ ticker, formulas, onClose }) {
   const [a, setA] = useState(null)
@@ -42,13 +43,14 @@ export default function Asset({ ticker, formulas, onClose }) {
 
         {/* Range selector */}
         <div className="ranges">
-          {RANGES.map((r) => (
+          {Object.keys(RANGES).map((r) => (
             <div key={r} className={'range ' + (r === range ? 'sel' : '')} onClick={() => setRange(r)}>{r}</div>
           ))}
         </div>
 
         {/* Price chart with blue dashed fair-value line */}
-        <PriceChart history={a.price_history} fairValue={a.fair_value} />
+        <PriceChart history={a.price_history.slice(-RANGES[range])} fairValue={a.fair_value}
+          rangeLabel={range} />
 
         {/* Stats grid */}
         <div className="card" style={{ padding: 0 }}>
@@ -248,7 +250,10 @@ function Sliders({ a }) {
       </div>
       <Slider label="Initial growth" value={g} min={-0.05} max={0.4} step={0.005} onChange={setG} fmt={pct} />
       <Slider label="Target margin" value={m} min={0.02} max={0.5} step={0.005} onChange={setM} fmt={pct} />
-      <Slider label="WACC" value={w} min={base.wacc_terminal + 0.005} max={0.18} step={0.0025} onChange={setW} fmt={pct} />
+      {/* Bounds must include the base value — several firms' WACC sits below
+          the terminal WACC, and only the (fixed) terminal WACC constrains TV. */}
+      <Slider label="WACC" value={w} min={Math.min(0.03, base.wacc_initial)}
+        max={Math.max(0.18, base.wacc_initial)} step={0.0025} onChange={setW} fmt={pct} />
       <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
         Sliders recompute the same 10-year FCFF model client-side. Reset by reopening.
       </div>

@@ -39,15 +39,23 @@ def collect_numbers(obj) -> set[float]:
         if isinstance(x, (int, float)):
             nums.add(round(float(x), 6))
         elif isinstance(x, dict):
-            for v in x.values():
+            for k, v in x.items():
+                # Keys are part of what the model sees — "p50", "plus_50bp"
+                # license narrating "P50" or "±50bp".
+                if isinstance(k, str):
+                    walk(k)
                 walk(v)
         elif isinstance(x, (list, tuple)):
             for v in x:
                 walk(v)
         elif isinstance(x, str):
-            m = _to_float(x)
-            if m is not None:
-                nums.add(round(m, 6))
+            # Extract every numeric token, not just whole-string floats —
+            # engine strings like the sizing line ("≈ 15% … (~1,500 US$)")
+            # legitimately carry numbers the narrative may restate.
+            for tok in _NUM_RE.findall(x):
+                m = _to_float(tok)
+                if m is not None:
+                    nums.add(round(m, 6))
 
     walk(obj)
     # Also add common derived representations (percent<->decimal) for tolerance.
@@ -59,8 +67,11 @@ def collect_numbers(obj) -> set[float]:
 
 
 def _matches_any(value: float, allowed: set[float], rel_tol: float = 0.02) -> bool:
+    # 2% relative tolerance absorbs narrative rounding ("9.3%" for 0.0929);
+    # the tiny absolute floor only covers exact-zero comparisons. A generous
+    # floor here would let misstated small rates (e.g. 3.4% vs 2.5%) through.
     for a in allowed:
-        tol = max(abs(a) * rel_tol, 0.01)
+        tol = max(abs(a) * rel_tol, 0.001)
         if abs(value - a) <= tol:
             return True
     return False
@@ -81,8 +92,10 @@ def validate_numbers(text: str, allowed_source: object) -> dict:
         rv = round(v, 6)
         if rv in scaffolding:
             continue
-        if not _matches_any(v, allowed) and not _matches_any(v * 100, allowed) \
-           and not _matches_any(v / 100, allowed):
+        # collect_numbers already expands allowed values ×100 and ÷100 for
+        # percent<->decimal, so a single comparison suffices — re-converting
+        # here too would square the tolerance surface.
+        if not _matches_any(v, allowed):
             unverified.append(tok.strip())
     jargon = [w for w in BANNED_JARGON if w.lower() in text.lower()]
     return {"ok": not unverified and not jargon, "unverified": unverified, "jargon": jargon}

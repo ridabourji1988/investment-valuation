@@ -71,8 +71,10 @@ def verdict_memo(payload: dict) -> str:
     return ("Write a 300-500 word investor memo explaining this stock's verdict. Cover: what "
             "the company is, what it's worth versus the price, the margin of safety, the "
             "quality read, the main risks, and 2-3 concrete 'sell triggers' that would break "
-            "the thesis. End with the time horizon. Use only numbers found in this JSON:\n"
-            + _pack(payload))
+            "the thesis. End with the time horizon. Use only numbers found in this JSON — "
+            "never derive new ones (no multiplying, adding, or converting values; express a "
+            "sell trigger as 'the price rising above 1.1 times fair value', not as a computed "
+            "price). JSON:\n" + _pack(payload))
 
 
 def market_brief(payload: dict) -> str:

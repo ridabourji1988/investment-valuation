@@ -42,8 +42,11 @@ def simulate(base: DCFAssumptions, price: float, cfg: MCConfig | None = None) ->
         a = copy.copy(base)
         a.growth_initial = float(growth_draws[i])
         a.target_margin = max(0.01, float(margin_draws[i]))
-        w = max(base.wacc_terminal + 0.005, float(wacc_draws[i]))  # keep WACC > terminal g
-        a.wacc_initial = w
+        # No clamp: only the (undrawn) terminal WACC must exceed terminal
+        # growth. Clamping the drawn initial WACC truncates the distribution
+        # and biases P(V>P) whenever the firm's WACC sits near/below the
+        # terminal level; invalid draws are discarded by validate() below.
+        a.wacc_initial = float(wacc_draws[i])
         try:
             values[i] = value_firm(a)["value_per_share"]
             valid += 1
@@ -83,6 +86,6 @@ def simulate(base: DCFAssumptions, price: float, cfg: MCConfig | None = None) ->
         citation=spec.source_citation,
         caveats=[
             "Distributions are assumed Gaussian and independent; real drivers are correlated and skewed.",
-            "Draws that violate WACC > g are clamped, not discarded blindly.",
+            "Draws violating model constraints (e.g. margin ≤ 1%) are discarded, not clamped.",
         ],
     )

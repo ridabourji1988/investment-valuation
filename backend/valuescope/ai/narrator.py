@@ -58,7 +58,7 @@ def _fallback_memo(a: dict) -> str:
             f"estimate, not advice.")
 
 
-def narrate_asset(analysis: dict, *, want: tuple = ("valuation", "memo")) -> dict:
+def narrate_asset(analysis: dict, *, want: tuple = ("business", "valuation", "memo")) -> dict:
     """Produce the AI blocks for an Asset 360 view."""
     a = analysis
     # Compact, number-only payload handed to the model (and to the validator).
@@ -75,10 +75,29 @@ def narrate_asset(analysis: dict, *, want: tuple = ("valuation", "memo")) -> dic
         "verdict": a["verdict"],
         "monte_carlo": {k: round(v, 2) if isinstance(v, (int, float)) else v
                         for k, v in a["monte_carlo"].items()},
+        # Versioned house-rule thresholds (verdict_rules v1). Including them
+        # here both lets the model cite them and whitelists them for the
+        # number-validator guardrail — derived arithmetic stays banned.
+        "rules": {"buy_mos_min": 0.25, "buy_quality_min": 60,
+                  "buy_prob_min": 0.70, "buy_trap_flags_max": 2,
+                  "sell_price_to_value": 1.1, "sell_trap_flags_min": 4},
     }
 
     out: dict = {"payload": payload, "blocks": {}}
 
+    if "business" in want:
+        facts = {
+            "name": a["name"], "ticker": a["ticker"], "sector": a["sector"],
+            "exchange": a["exchange"],
+            "revenue_ttm_usd": round(_input(a, "intrinsic_value", "Revenue₀"), 0),
+            "operating_margin": round(_input(a, "intrinsic_value", "Operating margin₀"), 4),
+        }
+        g = _generate(prompts.SYSTEM_PROMPT,
+                      prompts.business_description(a["name"], a["sector"], facts), facts,
+                      max_tokens=300)
+        out["blocks"]["business"] = _finalize(
+            g, lambda: f"{a['name']} ({a['ticker']}) operates in the {a['sector']} sector "
+                       f"and is listed on {a['exchange']}.")
     if "valuation" in want:
         g = _generate(prompts.SYSTEM_PROMPT, prompts.valuation_narrative(payload), payload,
                       max_tokens=400)

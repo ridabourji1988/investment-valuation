@@ -33,8 +33,10 @@ export function Sparkline({ data, prevClose, width = 90, height = 34 }) {
   )
 }
 
-export function PriceChart({ history, fairValue, height = 220 }) {
-  const rows = history.map((p) => ({ i: p.t, close: p.close }))
+export function PriceChart({ history, fairValue, rangeLabel = '1Y', height = 220 }) {
+  // Reindex from 0 — history may be a tail slice, and recharts ticks refer to
+  // dataKey values, not positions.
+  const rows = history.map((p, idx) => ({ i: idx, close: p.close }))
   const closes = rows.map((r) => r.close)
   const lo = Math.min(...closes, fairValue || Infinity)
   const hi = Math.max(...closes, fairValue || -Infinity)
@@ -49,7 +51,7 @@ export function PriceChart({ history, fairValue, height = 220 }) {
         <LineChart data={rows} margin={{ top: 8, right: 44, bottom: 4, left: 0 }}>
           <CartesianGrid stroke={T.separator} strokeWidth={0.5} vertical={false} />
           <XAxis dataKey="i" ticks={ticks} tick={{ fill: T.gray, fontSize: 10 }}
-            axisLine={false} tickLine={false} tickFormatter={(i) => labelFor(i, n)} />
+            axisLine={false} tickLine={false} tickFormatter={(i) => labelFor(i, n, rangeLabel)} />
           <YAxis orientation="right" domain={[lo * 0.98, hi * 1.02]}
             tick={{ fill: T.gray, fontSize: 10 }} axisLine={false} tickLine={false} width={44}
             tickFormatter={(v) => v.toFixed(0)} />
@@ -68,9 +70,10 @@ export function PriceChart({ history, fairValue, height = 220 }) {
   )
 }
 
-function labelFor(i, n) {
+function labelFor(i, n, rangeLabel) {
   const frac = i / (n - 1)
-  const months = ['1Y ago', '9M', '6M', '3M', 'Now']
+  const start = rangeLabel === 'All' ? 'Start' : `${rangeLabel} ago`
+  const labels = [start, '', '', '', 'Now']
   const idx = Math.round(frac * 4)
-  return months[idx] || ''
+  return labels[idx] || ''
 }

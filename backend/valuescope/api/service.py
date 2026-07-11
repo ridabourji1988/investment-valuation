@@ -73,7 +73,9 @@ def feed() -> dict:
         "buys": buys,
         "regime": dash["regime"]["result"]["label"],
         "regime_implication": dash["regime"]["result"]["implication"],
-        "sources": provider.get_macro().get("sources", {}),
+        # From the cached dashboard — a direct provider.get_macro() here would
+        # fire live FRED fetches on every feed request.
+        "sources": dash.get("sources", {}),
     })
 
 

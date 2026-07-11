@@ -15,8 +15,9 @@ class Config:
 
     # AI (OpenRouter)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "z-ai/glm-4.6")
-    OPENROUTER_PROVIDER: str = os.getenv("OPENROUTER_PROVIDER", "Streamlake")
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "z-ai/glm-5.2")
+    # OpenRouter provider routing slug (see /api/v1/providers): StreamLake = "streamlake".
+    OPENROUTER_PROVIDER: str = os.getenv("OPENROUTER_PROVIDER", "streamlake")
     OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     AI_ENABLED: bool = _bool("VALUESCOPE_AI_ENABLED", True)
 

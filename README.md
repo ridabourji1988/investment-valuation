@@ -26,7 +26,7 @@ step-by-step arithmetic → the book the formula comes from).
 | **Engine** (`backend/valuescope/engine`) | 10-year FCFF DCF (Damodaran *ginzu*), terminal value, reverse DCF (bisection), Monte Carlo (≥10k runs), CAPM, bottom-up beta (Hamada), WACC, margin of safety, NCAV net-nets, Magic Formula, Piotroski F-Score, Altman Z-Score, Beneish M-Score, quality composite, Sahm rule, regime classifier, rate-sensitivity, verdict rules + value-trap check. Every metric emits a **CalculationTrace**. |
 | **Registry** (`backend/valuescope/registry/formulas.yaml`) | Single source of truth: `formula_id → expression, variables, citation, implementation, tests`. |
 | **Data** (`backend/valuescope/data`) | Live SEC EDGAR / Yahoo / FRED clients + a bundled demo universe so the app runs fully offline. |
-| **AI** (`backend/valuescope/ai`) | OpenRouter client (GLM via **Streamlake** with a cached system prompt for the discount) + number-validator guardrail + deterministic fallback. |
+| **AI** (`backend/valuescope/ai`) | OpenRouter client (**GLM 5.2 via StreamLake**, implicit prompt caching for the discount) + number-validator guardrail + deterministic fallback. |
 | **API** (`backend/valuescope/api`) | FastAPI: `/api/feed`, `/api/asset/{t}`, `/api/asset/{t}/calc/{metric}`, `/api/macro`, `/api/macro/rate-sensitivity`, `/api/formulas`, `/api/brief`, `/api/health`. |
 | **Web** (`web/`) | React + Vite + Recharts. Opportunity Feed, Asset 360 (with live-slider DCF, Reverse DCF, Monte Carlo tabs), Show Calculation sheets with recursive drill-down, Macro & Cycle dashboard, Learn/Methodology generated from the registry. |
 
@@ -73,8 +73,9 @@ docker run -p 8000:8000 --env-file .env valuescope
    **`Dockerfile`** (config in `railway.json`, health check at `/api/health`).
 2. In **Project → Variables**, set (see `.env.example`):
    - `OPENROUTER_API_KEY` — your OpenRouter key (comma-separate multiple keys).
-   - `OPENROUTER_MODEL` — the GLM slug to use (e.g. `z-ai/glm-4.6`).
-   - `OPENROUTER_PROVIDER=Streamlake` — requested first for the caching discount.
+   - `OPENROUTER_MODEL=z-ai/glm-5.2` (the default; verified live).
+   - `OPENROUTER_PROVIDER=streamlake` (the default routing slug) — StreamLake is
+     requested first for the caching discount.
    - `VALUESCOPE_LIVE_DATA=true` and `VALUESCOPE_SEC_UA="…your email…"` to enable live
      prices/macro (otherwise the demo dataset is served).
 3. Deploy. Railway injects `PORT`; the server binds `0.0.0.0:$PORT` automatically.
@@ -86,10 +87,13 @@ narratives); adding the OpenRouter key switches on GLM-written narratives, and
 
 ## Prompt caching
 
-The AI client sends the large, static methodology/system prompt as a single cached
-breakpoint (`cache_control: ephemeral`) and puts all per-request data in the user
-message, so repeated calls reuse the cached prefix at the discounted rate on providers
-that support it (Streamlake for GLM). See `backend/valuescope/ai/openrouter.py`.
+GLM providers on OpenRouter cache the prompt prefix **implicitly** — the client keeps
+the large, static methodology/system prompt first and puts all per-request data in the
+user message, so repeated calls reuse the cached prefix. Verified live on StreamLake:
+77–91% of prompt tokens billed at the cache-read rate (~19% of the normal prompt
+price), ≈$0.0001 per narration call. Do not add Anthropic-style `cache_control`
+breakpoints — they divert OpenRouter's routing away from StreamLake (observed live).
+See `backend/valuescope/ai/openrouter.py`.
 
 ## License
 

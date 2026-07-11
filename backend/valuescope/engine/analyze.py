@@ -8,7 +8,7 @@ Every metric carries its CalculationTrace so the frontend can render
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 
 from . import beta as beta_mod
 from . import capm as capm_mod
@@ -135,10 +135,12 @@ def analyze(c: CompanyInputs, *, mc_runs: int = 10_000, regime_reduce: float = 1
         traces["beneish"] = q_mod.beneish_m_score(c.beneish)
     quality_score = 60.0
     if c.quality:
-        # inject computed ROIC/WACC if not preset
+        # Inject the computed WACC via a copy — c.quality may be shared
+        # provider state (get_company copies CompanyInputs shallowly), and
+        # mutating it would pin the first-ever WACC across all later requests.
         q = c.quality
         if q.wacc == 0:
-            q.wacc = wacc_t.result
+            q = replace(q, wacc=wacc_t.result)
         qc = q_mod.quality_composite(q)
         traces["quality"] = qc
         quality_score = qc.result["total"]

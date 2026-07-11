@@ -27,8 +27,10 @@ def sahm_rule(unemployment_monthly: list) -> CalculationTrace:
     if n < 15:
         raise ValueError("need at least 15 monthly unemployment observations")
     current_avg3 = _avg3(unemployment_monthly, n - 1)
-    # trailing 12 months of the 3-month average (including current)
-    avg3_series = [_avg3(unemployment_monthly, i) for i in range(n - 12, n)]
+    # Minimum of the 3-month average over the PREVIOUS 12 months, excluding the
+    # current one — including it floors the value at 0, but FRED's SAHMREALTIME
+    # is regularly negative.
+    avg3_series = [_avg3(unemployment_monthly, i) for i in range(n - 13, n - 1)]
     trailing_min = min(avg3_series)
     value = current_avg3 - trailing_min
     triggered = value >= 0.50

@@ -1,10 +1,18 @@
-"""OpenRouter chat client — GLM via the Streamlake provider, with prompt caching.
+"""OpenRouter chat client — GLM 5.2 via the StreamLake provider, with prompt caching.
 
-Prompt caching (PRD cost note): the large, static methodology/system prompt is
-sent as a single cached breakpoint (`cache_control: ephemeral`). OpenRouter
-forwards the breakpoint to providers that support caching (Streamlake for GLM),
-so repeated calls reuse the cached prefix at the discounted rate. Per-request
-data goes in the *user* message so it never busts the cached prefix.
+Prompt caching (PRD cost note): GLM providers cache the prompt prefix
+IMPLICITLY — no cache_control markers needed. The large, static methodology
+system prompt therefore goes first as a plain string, and per-request data goes
+in the *user* message so it never busts the cached prefix. Verified live:
+repeat calls bill cached tokens at ~19% of the prompt rate.
+
+Do NOT add Anthropic-style `cache_control` breakpoints here: sending them makes
+OpenRouter's routing bypass StreamLake (observed live — requests divert to a
+~3x more expensive provider).
+
+Reasoning is disabled: GLM 5.2 is a thinking model, but narration is a
+formatting task — with reasoning on, small max_tokens budgets get consumed by
+reasoning tokens and the content comes back empty (observed live).
 """
 from __future__ import annotations
 
@@ -27,17 +35,14 @@ def build_payload(system_prompt: str, user_prompt: str, *, temperature: float = 
     """Construct the request body with a cached system prefix and provider routing."""
     return {
         "model": config.OPENROUTER_MODEL,
-        # Prefer Streamlake for the GLM caching discount; allow fallbacks so a
+        # Prefer StreamLake for the GLM caching discount; allow fallbacks so a
         # provider outage still returns an answer.
         "provider": {"order": [config.OPENROUTER_PROVIDER], "allow_fallbacks": True},
+        # Narration doesn't need chain-of-thought; leaving it on empties small
+        # completion budgets (reasoning tokens count against max_tokens).
+        "reasoning": {"enabled": False},
         "messages": [
-            {
-                "role": "system",
-                "content": [
-                    {"type": "text", "text": system_prompt,
-                     "cache_control": {"type": "ephemeral"}},
-                ],
-            },
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": temperature,
@@ -72,9 +77,15 @@ def chat(system_prompt: str, user_prompt: str, *, temperature: float = 0.3,
             r.raise_for_status()
             data = r.json()
             choice = data["choices"][0]["message"]["content"]
+            text = choice if isinstance(choice, str) else _flatten(choice)
+            if not (text or "").strip():
+                # Reasoning models can exhaust max_tokens before emitting
+                # content; surface as a failure so callers fall back.
+                last_err = OpenRouterError("empty completion (reasoning consumed budget?)")
+                continue
             usage = data.get("usage", {})
             return {
-                "text": choice if isinstance(choice, str) else _flatten(choice),
+                "text": text,
                 "usage": {
                     "prompt_tokens": usage.get("prompt_tokens"),
                     "completion_tokens": usage.get("completion_tokens"),

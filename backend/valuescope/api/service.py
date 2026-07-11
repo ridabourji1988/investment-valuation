@@ -90,11 +90,34 @@ def _warm_one(ticker: str, force: bool = False) -> None:
         _WARM["attempted"].add(ticker)
 
 
+def _price_sources_cooldown() -> float:
+    """Seconds until ANY price source is willing again (0 = at least one is).
+    Large warm runs must PAUSE while every source is cooling down — marching
+    on would fast-fail the whole remaining list (observed: a 400-name warm
+    turned a 2-minute Cboe breaker into ~70 spurious failures)."""
+    from ..data import alphavantage, boursorama, cboe, yahoo
+    now = time.time()
+    remaining = [max(0.0, cboe._BREAKER["down_until"] - now),
+                 max(0.0, yahoo._BREAKER["down_until"] - now)]
+    if alphavantage.available():
+        remaining.append(0.0)
+    # Boursorama only carries EU venues — it can't unblock a US-name warm,
+    # so it does not count toward "some source is available".
+    return min(remaining)
+
+
+def _warm_one_paced(ticker: str, pace: float) -> None:
+    wait = _price_sources_cooldown()
+    if wait > 0:
+        time.sleep(min(wait + 1.0, 180.0))
+    _warm_one(ticker)
+    time.sleep(pace)  # courtesy pacing — burst scans trip source throttles
+
+
 def _warm_all() -> None:
     for t in provider.list_tickers():
         if peek_analysis(t) is None:  # persisted entries refresh via the queue
-            _warm_one(t)
-            time.sleep(1.0)  # courtesy pacing — burst scans trip source throttles
+            _warm_one_paced(t, 1.0)
         else:
             _WARM["attempted"].add(t)
     _persist_analyses()
@@ -112,8 +135,9 @@ def _watchdog_loop() -> None:
         try:
             missing = [t for t in provider.list_tickers() if peek_analysis(t) is None]
             for t in missing:
-                _warm_one(t)
-                time.sleep(0.5)
+                _warm_one_paced(t, 0.5)
+            if missing:
+                _persist_analyses()
         except Exception:  # noqa: BLE001 — watchdog must never die
             pass
 

@@ -35,22 +35,36 @@ export default function Feed({ onOpen, onMacro }) {
   }
 
   const briefFor = useRef(-1)
+  const fastUntil = useRef(0)
+  const loadRef = useRef(null)
   useEffect(() => {
     let timer
     const load = () => api.feed().then((f) => {
       setFeed(f)
-      // Poll fast during the first scan, slower while tickers are missing
-      // (source outages self-heal server-side) — the page recovers on its own.
+      // Poll fast during the first scan and after a manual retry, slower
+      // while tickers are missing — the page recovers on its own.
       if (f.warming) timer = setTimeout(load, 4000)
-      else if (f.count < f.universe) timer = setTimeout(load, 30000)
+      else if (f.count < f.universe)
+        timer = setTimeout(load, Date.now() < fastUntil.current ? 5000 : 30000)
       if (!f.warming && briefFor.current !== f.count) {
         briefFor.current = f.count
         api.brief().then(setBrief).catch(() => {})
       }
     }).catch((e) => setErr(e.message))
+    loadRef.current = () => { clearTimeout(timer); load() }
     load()
     return () => clearTimeout(timer)
   }, [])
+
+  const [retrying, setRetrying] = useState(false)
+  const retryNow = () => {
+    setRetrying(true)
+    fastUntil.current = Date.now() + 180000
+    api.retry().catch(() => {}).finally(() => {
+      loadRef.current && loadRef.current()
+      setTimeout(() => setRetrying(false), 8000)
+    })
+  }
 
   if (err) return <div className="loading">Could not load feed: {err}</div>
   if (!feed) return (
@@ -160,17 +174,20 @@ export default function Feed({ onOpen, onMacro }) {
       {/* Everything failed: a real explanation beats a wall of tickers */}
       {!feed.warming && feed.count === 0 && Object.keys(feed.failed || {}).length > 0 && (
         <div className="card">
-          <div className="eyebrow" style={{ color: T.amber }}>Market data source rate-limited</div>
+          <div className="eyebrow" style={{ color: T.amber }}>Market data sources rate-limited</div>
           <div className="lead">
-            The price source (Yahoo Finance) is rate-limiting this network, so no company
-            can be valued right now. Nothing is broken — the scanner retries automatically
-            every few minutes and this page refreshes itself when data flows again.
+            The market-data sources are rate-limiting this network, so no company can be
+            valued right now. Nothing is broken — the scanner retries automatically every
+            few minutes and this page refreshes itself when data flows again.
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             SEC filings are unaffected. ValueScope never shows simulated numbers.
           </div>
-          <button className="pill-btn" style={{ marginTop: 10, width: 'auto', padding: '0 16px' }}
-            onClick={() => api.retry().catch(() => {})}>Retry now</button>
+          <button className="pill-btn" disabled={retrying}
+            style={{ marginTop: 10, width: 'auto', padding: '0 16px', opacity: retrying ? 0.6 : 1 }}
+            onClick={retryNow}>
+            {retrying ? <><span className="spinner" style={{ width: 10, height: 10 }} />Rescanning…</> : 'Retry now'}
+          </button>
         </div>
       )}
       {!feed.warming && feed.count > 0 && Object.keys(feed.failed || {}).length > 0 && (

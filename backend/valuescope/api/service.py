@@ -297,13 +297,19 @@ def rate_sensitivity_table(bp: int = 50) -> list[dict]:
 
 
 def retry_failed() -> dict:
-    """User-triggered: clear failures and re-scan everything missing NOW
-    (the watchdog does this every 5 minutes anyway)."""
+    """User-triggered: reset the source circuit breakers, clear failures and
+    re-scan everything missing NOW (the watchdog does this every 5 minutes
+    anyway — this exists so a human never has to wait for it)."""
+    from ..data import alphavantage, cboe, yahoo
+    for breaker in (yahoo._BREAKER, cboe._BREAKER):
+        breaker["down_until"] = 0.0
+        breaker["strikes"] = 0
+    alphavantage._BREAKER["down_until"] = 0.0
     _WARM["failed"] = {}
     missing = [t for t in provider.list_tickers() if peek_analysis(t) is None]
     for t in missing:
         _refresh_async(t)
-    return {"retrying": missing}
+    return {"retrying": missing, "count": len(missing)}
 
 
 def status() -> dict:

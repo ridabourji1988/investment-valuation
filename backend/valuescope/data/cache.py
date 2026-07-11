@@ -22,8 +22,12 @@ import httpx
 _STORE: dict = {}
 _LOCK = threading.Lock()
 
+# VALUESCOPE_DATA_DIR: durable directory for all pickles (mount a Railway
+# Volume there so big-universe warms survive redeploys). Default: OS tmp,
+# which is ephemeral per container.
+_DATA_DIR = os.getenv("VALUESCOPE_DATA_DIR", tempfile.gettempdir())
 _PERSIST_PATH = os.getenv("VALUESCOPE_CACHE_FILE",
-                          os.path.join(tempfile.gettempdir(), "valuescope-cache.pkl"))
+                          os.path.join(_DATA_DIR, "valuescope-cache.pkl"))
 _PERSIST_MAX_BYTES = 512 * 1024
 _persist_loaded = False
 _last_persist = 0.0

@@ -142,7 +142,9 @@ def _watchdog_loop() -> None:
             pass
 
 
-_PERSIST_PATH = os.path.join(tempfile.gettempdir(), "valuescope-analyses.pkl")
+_PERSIST_PATH = os.path.join(
+    os.getenv("VALUESCOPE_DATA_DIR", tempfile.gettempdir()),
+    "valuescope-analyses.pkl")
 
 
 def _load_persisted_analyses() -> None:

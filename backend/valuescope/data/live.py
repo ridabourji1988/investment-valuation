@@ -309,7 +309,10 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     if rev_s[-1][0] != ebit_s[-1][0]:
         raise ValueError(f"{ticker}: revenue ({rev_s[-1][0]}) and EBIT ({ebit_s[-1][0]}) "
                          "series end in different fiscal years")
-    if not (-0.5 < ebit / revenue < 0.65):
+    # Wide bounds: this guard catches INCONSISTENT series (revenue and EBIT
+    # from different scales/units), not unusual businesses — AppLovin really
+    # files a 76% operating margin.
+    if not (-0.5 < ebit / revenue < 0.85):
         raise ValueError(f"{ticker}: implausible operating margin "
                          f"{ebit / revenue:.0%} — inconsistent XBRL series")
 

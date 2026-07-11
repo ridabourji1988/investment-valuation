@@ -22,4 +22,5 @@ export const api = {
   formulas: () => get('/api/formulas'),
   search: (q) => get(`/api/search?q=${encodeURIComponent(q)}`),
   retry: () => fetch(base + '/api/retry', { method: 'POST' }).then((r) => r.json()),
+  priced: () => get('/api/priced'),
 }

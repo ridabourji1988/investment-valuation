@@ -3,6 +3,7 @@ import { api } from './lib/api'
 import Feed from './components/Feed'
 import Asset from './components/Asset'
 import Macro from './components/Macro'
+import Priced from './components/Priced'
 import Learn from './components/Learn'
 
 export default function App() {
@@ -19,7 +20,7 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
-  const navItems = [['feed', 'Feed'], ['macro', 'Macro & Cycle'], ['learn', 'Learn']]
+  const navItems = [['feed', 'Feed'], ['macro', 'Macro & Cycle'], ['markets', 'Markets'], ['learn', 'Learn']]
   return (
     <div className="app">
       <nav className="topnav">
@@ -36,6 +37,9 @@ export default function App() {
       <div style={{ display: tab === 'macro' ? undefined : 'none' }}>
         <Macro formulas={formulas} />
       </div>
+      <div style={{ display: tab === 'markets' ? undefined : 'none' }}>
+        <Priced />
+      </div>
       <div style={{ display: tab === 'learn' ? undefined : 'none' }}>
         <Learn />
       </div>
@@ -48,6 +52,9 @@ export default function App() {
         </div>
         <div className={'item ' + (tab === 'macro' ? 'sel' : '')} onClick={() => setTab('macro')}>
           <span className="ic">◔</span>Macro
+        </div>
+        <div className={'item ' + (tab === 'markets' ? 'sel' : '')} onClick={() => setTab('markets')}>
+          <span className="ic">◈</span>Markets
         </div>
         <div className={'item ' + (tab === 'learn' ? 'sel' : '')} onClick={() => setTab('learn')}>
           <span className="ic">✎</span>Learn

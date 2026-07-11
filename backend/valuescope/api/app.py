@@ -116,6 +116,17 @@ def search(q: str) -> dict:
     return {"results": provider.search(q.strip())}
 
 
+@app.get("/api/priced")
+def get_priced() -> dict:
+    """Commodities & crypto — priced, never valued (no cash flows)."""
+    from ..data import priced
+    from ..data.cache import get_cached
+    try:
+        return get_cached("priced:snapshot", 30 * 60, priced.snapshot)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=f"priced-asset sources unavailable: {e}")
+
+
 @app.post("/api/retry")
 def retry() -> dict:
     return service.retry_failed()

@@ -41,3 +41,27 @@
 **Context**: Live probe proved GLEIF→filings.xbrl.org→OIM-JSON end-to-end (Air France FY2024 extracted).
 **Choice**: Implement per the recipe in PLAN.md Milestone 2. Germany is NOT in filings.xbrl.org — BMW excluded until a German OAM source exists; SAP unaffected (20-F).
 **Outcome**: PENDING (implementation next session)
+
+### 2026-07-11 Decision: Acquisition goodwill excluded from invested capital
+**Context**: AMD showed fair value −$1.75 (price $560); user lost trust. Xilinx's ~$45B goodwill made sales-to-capital 0.62 → ten years of phantom negative FCFF.
+**Choice**: invested capital = equity + debt − cash − goodwill (Damodaran); floor revenue/2.
+**Alternatives considered**: marginal Δsales/Δcapital (noisy), leaving as-was with a warning (dishonest output).
+**Outcome**: GOOD — AMD fair −$1.75 → +$28.97, implied growth −20% → +60% (coherent); AAPL/AVGO sane.
+**Lesson**: every mechanically-derived input needs an "is this economically possible" review; jointly-plausible inputs can still compound into absurd outputs.
+
+### 2026-07-11 Decision: Lease liabilities are debt; growth base-effect guard
+**Context**: AF-KLM valued at €310/share (price €13): zero debt tags matched (aircraft leases untagged as borrowings) and 2020-COVID-base CAGR hit the 30% growth cap.
+**Choice**: add IFRS-16 lease liabilities (and us-gaap FINANCE leases only — operating-lease cost already sits in US-GAAP EBIT) to debt; growth base = min(point-to-point CAGR, median YoY).
+**Outcome**: GOOD — AF-KLM net debt €8.1B, growth 13.7%, fair €106 (still rich → kept out of default scan; cyclical normalization stays on backlog).
+**Lesson**: deep cyclicals need cycle-normalized margins before they can be shown by default.
+
+### 2026-07-11 Decision: Boursorama as keyless EU price source
+**Context**: EU prices were planned Yahoo-only; Yahoo is IP-boxed both locally and on Railway — ESEF names would have been dead on arrival. Cboe/AV don't carry Euronext; Euronext's own AJAX is encrypted.
+**Choice**: Boursorama GetTicksEOD (browser-shaped headers required): Paris "1rP"+mnemonic, Amsterdam "1rA"+mnemonic, ~10y depth, EOD label. Helsinki not covered → .HE names excluded from default scan.
+**Outcome**: GOOD — LVMH/Adyen valued with Yahoo fully down.
+
+### 2026-07-11 Decision: ESEF ingestion shipped (Milestone 2)
+**Context**: approved earlier today; recipe pre-validated live.
+**Choice**: OIM→EDGAR-shape adapter so the entire existing assembly (tag fallbacks, share identities, forensics) works on EU filings unchanged; EUR end-to-end with ECB AAA 10y as risk-free.
+**Outcome**: GOOD — LVMH FY2024 revenue €84.68B extracted exactly; 106/108 universe live locally.
+**Lesson**: adapting a new source to an existing internal shape beats a parallel pipeline — every hard-won fallback came free.

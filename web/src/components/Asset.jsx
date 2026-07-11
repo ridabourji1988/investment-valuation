@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { api } from '../lib/api'
-import { usd, pct, num, signed } from '../lib/format'
+import { money, pct, num, signed } from '../lib/format'
 import { T, verdictColor } from '../theme'
 import { PriceChart } from './Charts'
 import { CalcProvider, Calc } from './Calc'
@@ -14,7 +14,7 @@ function friendlyError(msg) {
   if (/rate.?limit|circuit breaker|429/i.test(msg))
     return 'The market-data source is rate-limiting this network right now. It recovers on its own — the system retries automatically, so try again in a few minutes. Numbers are never simulated.'
   if (/no sec|no xbrl|files no xbrl|unsponsored|unknown ticker|not found/i.test(msg))
-    return 'This company files no financial statements with the SEC (typically an unsponsored ADR of a foreign company), so it cannot be analyzed — ValueScope never fakes fundamentals. Coverage for EU-only filers via their official ESEF filings is on the roadmap.'
+    return 'This company files no financial statements with the SEC (typically an unsponsored ADR of a foreign company), so it cannot be analyzed — ValueScope never fakes fundamentals. Major EU-only filers are covered natively via their official ESEF filings — search the company name (e.g. LVMH, Airbus).'
   return 'A live data source failed for this company. The system retries automatically — try again shortly.'
 }
 
@@ -58,7 +58,7 @@ export default function Asset({ ticker, formulas, onClose }) {
             <span className={'tag ' + (a.data_quality === 'high' ? 'green' : a.data_quality === 'medium' ? 'amber' : 'red')}>
               data: {a.data_quality}
             </span>
-            {a.sources?.fundamentals && <span className="tag">{a.sources.fundamentals.includes('20-F') || a.sources.fundamentals.includes('converted') ? 'IFRS filer' : 'SEC filer'}</span>}
+            {a.sources?.fundamentals && <span className="tag">{a.sources.fundamentals.includes('ESEF') ? 'EU filer · ESEF' : a.sources.fundamentals.includes('converted') ? 'IFRS filer' : 'SEC filer'}</span>}
           </div>
           {/* Verify-at-source links — every number traceable to its origin */}
           {a.links && (a.links.filing || a.links.prices) && (
@@ -81,7 +81,7 @@ export default function Asset({ ticker, formulas, onClose }) {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-            <span style={{ fontSize: 30, fontWeight: 700 }} className="tnum">{usd(a.price)}</span>
+            <span style={{ fontSize: 30, fontWeight: 700 }} className="tnum">{money(a.price, a.currency)}</span>
             <span style={{ color: chg >= 0 ? T.green : T.red, fontWeight: 700 }}>
               {chg >= 0 ? pct(chg) + ' under fair value' : pct(-chg) + ' over fair value'}
             </span>
@@ -101,7 +101,7 @@ export default function Asset({ ticker, formulas, onClose }) {
         {/* Stats grid */}
         <div className="card" style={{ padding: 0 }}>
           <div className="stats">
-            <Stat k="Fair value" metric="intrinsic_value"><span>{usd(a.fair_value)}</span></Stat>
+            <Stat k="Fair value" metric="intrinsic_value"><span>{money(a.fair_value, a.currency)}</span></Stat>
             <Stat k="Margin of safety" metric="margin_of_safety"><span style={{ color: chg >= 0 ? T.green : T.red }}>{pct(a.margin_of_safety)}</span></Stat>
             <Stat k="Quality" metric="quality"><span>{num(a.quality, 0)}/100</span></Stat>
             <Stat k="P(value > price)" metric="monte_carlo"><span>{pct(a.prob_value_gt_price)}</span></Stat>
@@ -130,7 +130,7 @@ export default function Asset({ ticker, formulas, onClose }) {
         <ScenarioCard a={a} />
 
         {/* Macro & cycle context */}
-        <MacroContextCard ticker={a.ticker} fairValue={a.fair_value} />
+        <MacroContextCard ticker={a.ticker} currency={a.currency} fairValue={a.fair_value} />
 
         {/* Verdict memo (Apple News style) */}
         {narr?.blocks?.memo && (
@@ -195,7 +195,7 @@ function VerdictCard({ a }) {
         <div className="fill" style={{ width: pctWidth(ratio), background: verdictColor(v.action) }} />
         <div className="mark" style={{ left: '50%' }} title="fair value" />
       </div>
-      <div className="muted" style={{ fontSize: 13 }}>Price {usd(a.price)} vs fair value {usd(a.fair_value)}</div>
+      <div className="muted" style={{ fontSize: 13 }}>Price {money(a.price, a.currency)} vs fair value {money(a.fair_value, a.currency)}</div>
       <div style={{ marginTop: 8 }}>{v.sizing}</div>
       <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: T.gray2, fontSize: 14 }}>
         {v.reasons.map((r, i) => <li key={i} style={{ marginBottom: 3 }}>{r}</li>)}
@@ -266,7 +266,7 @@ function WorthCard({ a, narr }) {
       {tab === 'Assumptions' && <Sliders a={a} />}
       {tab === 'Reverse DCF' && (
         <div className="lead">
-          At {usd(a.price)}, the market is pricing in about <Calc metricId="implied_growth"><b>{pct(a.implied_growth)}</b></Calc> revenue growth.
+          At {money(a.price, a.currency)}, the market is pricing in about <Calc metricId="implied_growth"><b>{pct(a.implied_growth)}</b></Calc> revenue growth.
           The base case assumes {pct(assum(a).growth_initial)}. {a.implied_growth < assum(a).growth_initial
             ? 'The market is more pessimistic than the base case — a possible opportunity.'
             : 'The market is more optimistic than the base case — mind the risk.'}
@@ -289,10 +289,10 @@ function Sliders({ a }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span className="muted">Live fair value</span>
-        <span style={{ fontSize: 24, fontWeight: 800 }} className="tnum">{usd(val)}</span>
+        <span style={{ fontSize: 24, fontWeight: 800 }} className="tnum">{money(val, a.currency)}</span>
       </div>
       <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-        Margin of safety {pct(mos)} at price {usd(a.price)}
+        Margin of safety {pct(mos)} at price {money(a.price, a.currency)}
       </div>
       <Slider label="Initial growth" value={g} min={-0.05} max={0.4} step={0.005} onChange={setG} fmt={pct} />
       <Slider label="Target margin" value={m} min={0.02} max={0.5} step={0.005} onChange={setM} fmt={pct} />
@@ -329,7 +329,7 @@ function MonteCarlo({ a }) {
         In <Calc metricId="monte_carlo"><b>{pct(mc.prob_value_gt_price)}</b></Calc> of {num(mc.runs, 0)} simulations the stock looked undervalued.
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }} className="muted">
-        <span>P10 {usd(lo)}</span><span>P50 {usd(mid)}</span><span>P90 {usd(hi)}</span>
+        <span>P10 {money(lo, a.currency)}</span><span>P50 {money(mid, a.currency)}</span><span>P90 {money(hi, a.currency)}</span>
       </div>
       <div className="gauge" style={{ height: 10, marginTop: 6 }}>
         <div className="fill" style={{ left: 0, width: '100%', background: T.elev }} />
@@ -372,7 +372,7 @@ function ScenarioCard({ a }) {
       {rows.map((r) => (
         <div key={r.k} className="step">
           <span><b style={{ color: r.c }}>{r.k}</b> <span className="muted">({r.p} percentile)</span></span>
-          <span className="tnum">{usd(r.v)} · {signed((r.v - a.price) / a.price * 100, 0)}%</span>
+          <span className="tnum">{money(r.v, a.currency)} · {signed((r.v - a.price) / a.price * 100, 0)}%</span>
         </div>
       ))}
       <ul style={{ margin: '10px 0 0', paddingLeft: 18, color: T.gray2, fontSize: 14 }}>
@@ -382,7 +382,7 @@ function ScenarioCard({ a }) {
   )
 }
 
-function MacroContextCard({ ticker, fairValue }) {
+function MacroContextCard({ ticker, currency, fairValue }) {
   const [row, setRow] = useState(null)
   useEffect(() => {
     api.rateSensitivity(50).then((d) => setRow(d.rows.find((r) => r.ticker === ticker))).catch(() => {})
@@ -392,9 +392,9 @@ function MacroContextCard({ ticker, fairValue }) {
     <div className="card">
       <div className="eyebrow">Macro &amp; cycle context — fair value at 10Y ±50bp</div>
       <div className="stats" style={{ marginTop: 6 }}>
-        <div className="cell"><div className="stat-k">−50 bp</div><div className="stat-v tnum" style={{ color: T.green }}>{usd(row.minus_50bp)}</div></div>
-        <div className="cell"><div className="stat-k">Base</div><div className="stat-v tnum">{usd(row.base)}</div></div>
-        <div className="cell"><div className="stat-k">+50 bp</div><div className="stat-v tnum" style={{ color: T.red }}>{usd(row.plus_50bp)}</div></div>
+        <div className="cell"><div className="stat-k">−50 bp</div><div className="stat-v tnum" style={{ color: T.green }}>{money(row.minus_50bp, currency)}</div></div>
+        <div className="cell"><div className="stat-k">Base</div><div className="stat-v tnum">{money(row.base, currency)}</div></div>
+        <div className="cell"><div className="stat-k">+50 bp</div><div className="stat-v tnum" style={{ color: T.red }}>{money(row.plus_50bp, currency)}</div></div>
       </div>
       <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
         Rates move fair value because they change the discount rate. Macro adjusts sizing, never the verdict.

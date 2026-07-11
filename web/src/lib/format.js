@@ -28,6 +28,12 @@ export function usd(value, decimals = 2) {
   return core(value, decimals) + THIN + 'US$'
 }
 
+// Currency-aware money: ESEF names are valued end-to-end in EUR.
+export function money(value, currency = 'USD', decimals = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return core(value, decimals) + THIN + (currency === 'EUR' ? '€' : 'US$')
+}
+
 // Compact large currency (e.g. market cap): 42,1 Md US$ / 6,20 Mrd style.
 export function usdCompact(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'

@@ -1,5 +1,20 @@
 # Working memory (active gotchas & context)
 
+- Boursorama EOD endpoint returns [] without browser-shaped headers
+  (User-Agent + Accept + X-Requested-With + Referer). Symbols: Paris
+  "1rP"+mnemonic, Amsterdam "1rA"+mnemonic; Helsinki NOT covered. `d` field
+  = days since 1970-01-01; length param is calendar days.
+- GLEIF fulltext top hit is often a subsidiary LEI with no ESEF filings —
+  always verify against filings.xbrl.org/api/entities/{LEI}/filings before
+  adding to the esef.py registry (Air Liquide/Safran/Vinci/Danone/Thales
+  still unresolved this way).
+- ESEF facts: OIM period ends are EXCLUSIVE (midnight after last day) —
+  subtract one day; keep only ifrs-full concepts with no dimensions beyond
+  {concept,entity,period,unit,language}.
+- Valuation model updates 2026-07-11 (all filers): goodwill OUT of invested
+  capital; IFRS-16 leases (us-gaap: finance leases only) IN debt; growth
+  base = min(CAGR, median YoY). Don't "fix" these back.
+
 - **Never** add Anthropic-style `cache_control` to OpenRouter GLM calls — it
   diverts routing away from StreamLake to ~3x pricier providers. GLM caches
   implicitly (static system prompt first).

@@ -75,13 +75,13 @@ docker run -p 8000:8000 --env-file .env valuescope
 2. In **Project → Variables**, set **one variable**:
    - `OPENROUTER_API_KEY` — your OpenRouter key (comma-separate multiple keys).
    Everything else has autonomous defaults (`z-ai/glm-5.2` via `streamlake`,
-   temperature 0, ~95-ticker global universe, keyless data pipeline) — see
+   temperature 0, ~110-ticker global universe, keyless data pipeline) — see
    `.env.example` for optional overrides.
 3. Deploy. Railway injects `PORT`; the server binds `0.0.0.0:$PORT` automatically.
    The single service serves both the API and the React app.
 
 At startup the server scans the whole universe in the background (SEC filings, prices,
-macro). The default universe covers the US, Europe and emerging markets (~95 names
+macro). The default universe covers the US, Europe and emerging markets (~110 names
 across tech, health care, consumer, industrials, energy and materials — banks and
 insurers are excluded until a dedicated financial-sector model exists, because an
 FCFF DCF misvalues them);
@@ -99,8 +99,16 @@ with deterministic narrative text.
   20-F/40-F — SAP, ASML, Shell, Novo Nordisk, TSMC, Alibaba, Vale, Infosys, … IFRS
   statements in EUR/DKK/TWD/etc. are converted at live spot FX; per-share values use
   listing-consistent share counts (Yahoo count or EDGAR ÷ ADR ratio).
-- **Not covered**: companies with no SEC registration (e.g. Nestlé's OTC ticker) —
-  search shows them greyed out as "no SEC filings" rather than faking numbers.
+- **EU-only filers (no SEC registration)**: covered natively from their **official
+  ESEF filings** (filings.xbrl.org, keyless) — LVMH, Hermès, L'Oréal, Airbus,
+  Schneider, Kering, Dassault Systèmes, EssilorLuxottica, Michelin, Pernod Ricard,
+  Adyen, Heineken Holding, ASM International, Wolters Kluwer, Ahold Delhaize, …
+  These are valued **end-to-end in EUR** (ECB AAA 10y as the risk-free rate) with
+  home-exchange prices (Yahoo → Boursorama EOD keyless fallback). Germany does not
+  feed filings.xbrl.org yet (BMW/Siemens not coverable); Nasdaq Helsinki names are
+  searchable but need Yahoo for prices.
+- **Not covered**: unsponsored-ADR-only names with no official XBRL source (e.g.
+  Nestlé's OTC ticker) — search shows them greyed out rather than faking numbers.
 
 ## Prompt caching
 

@@ -8,7 +8,24 @@ GLM 5.2 via StreamLake with guardrails + content-addressed narrative cache ·
 verify-at-source links, economic-events calendar · Railway deploy config.
 **DoD met**: math tested, live-verified 93/93 with zero failures, UI verified.
 
-## Milestone 2 — ESEF ingestion (APPROVED 2026-07-11; design VALIDATED live, implementation next)
+## Milestone 2 — ESEF ingestion (DONE 2026-07-11, live-verified 106/108 local)
+Shipped: data/esef.py (OIM→EDGAR-shape adapter — all live.py fallbacks/forensics
+work on EU filings unchanged), 19-name verified LEI registry (FR/NL/FI),
+data/ecb.py (euro-area AAA 10y = EUR risk-free), data/boursorama.py (keyless
+EOD prices for Euronext Paris "1rP"/Amsterdam "1rA" — carries EU names with
+Yahoo fully boxed), EUR valuation end-to-end (statements+price+risk-free all
+EUR), currency-aware UI, ESEF search merged (registry-first).
+Scope notes: Helsinki (.HE) has no keyless price fallback → KNEBV/NESTE/UPM
+searchable but not in the default scan; AF.PA searchable only (deep cyclical —
+needs cycle-normalized margins); KER.PA latest usable filing is FY2023 (asof
+shown honestly). Air Liquide/Safran/Vinci/Danone/Thales: GLEIF fulltext can't
+find their operating LEIs — revisit with hand-checked LEIs.
+Same-day engine fixes (all filers): acquisition goodwill excluded from
+invested capital (AMD −$1.75 → $28.97); IFRS-16/finance lease liabilities
+count as debt (AF-KLM net debt 0 → €8.1B); growth base = min(CAGR, median
+YoY) kills COVID-base-effect extrapolation.
+
+### Original validated recipe (kept for reference)
 Cover EU-only filers via official ESEF XBRL. **Proven recipe** (all keyless):
 1. Name→LEI: `api.gleif.org/api/v1/lei-records?filter[fulltext]=<name>` (60 req/min;
    autocompletions needs `field=fulltext`). LVMH=IOG4E947OATN0KJYSD45,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { usd, pct, signedPct } from '../lib/format'
+import { money, pct, signedPct } from '../lib/format'
 import { T, verdictColor } from '../theme'
 import { Sparkline } from './Charts'
 
@@ -89,7 +89,7 @@ export default function Feed({ onOpen, onMacro }) {
       <div className="subtitle">{today}</div>
 
       <div className="toolbar">
-        <input className="search" placeholder="Search any ticker or company (US, EU & EM via US listings)"
+        <input className="search" placeholder="Search any ticker or company (US, EU & EM)"
           value={q} onChange={(e) => onQuery(e.target.value)} />
         <button className={'pill-btn' + (showFilters ? ' on' : '')} title="Filters & sorting"
           onClick={() => setShowFilters((v) => !v)}>≡</button>
@@ -142,7 +142,8 @@ export default function Feed({ onOpen, onMacro }) {
           ))}
           <div className="search-hint">
             Any company with SEC filings is analyzable on demand — including European and
-            emerging-market names via their US listings (ADRs).
+            emerging-market names via their US listings (ADRs). Major EU-only filers
+            (LVMH, Airbus, Adyen…) are covered natively from their official ESEF filings.
           </div>
         </div>
       )}
@@ -231,7 +232,7 @@ export default function Feed({ onOpen, onMacro }) {
             </div>
             <Sparkline data={r.spark} prevClose={r.prev_close} />
             <div className="row-right">
-              <span className="price tnum">{usd(r.price)}</span>
+              <span className="price tnum">{money(r.price, r.currency)}</span>
               <span className={'chip ' + (chg >= 0 ? 'pos' : 'neg')}>{signedPct(chg)}</span>
             </div>
           </div>

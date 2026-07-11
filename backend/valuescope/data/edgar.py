@@ -124,8 +124,9 @@ def _duration_days(item: dict) -> int | None:
 
 
 # Annual-report forms: 10-K (domestic), 20-F (foreign private issuers, IFRS),
-# 40-F (Canadian MJDS).
-_ANNUAL_FORMS = ("10-K", "20-F", "40-F")
+# 40-F (Canadian MJDS), ESEF (EU official filings adapted by data/esef.py
+# into this same companyfacts shape).
+_ANNUAL_FORMS = ("10-K", "20-F", "40-F", "ESEF")
 _NAMESPACES = ("us-gaap", "ifrs-full")
 
 

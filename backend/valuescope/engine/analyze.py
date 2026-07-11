@@ -67,6 +67,9 @@ class CompanyInputs:
     sources: dict = field(default_factory=dict)
     links: dict = field(default_factory=dict)   # verify-at-source URLs
     asof: str = ""
+    # Valuation currency: price, statements and the risk-free rate all share
+    # it (USD for SEC filers/ADRs, EUR for ESEF filers).
+    currency: str = "USD"
 
 
 def _market_cap(c: CompanyInputs) -> float:
@@ -169,6 +172,7 @@ def analyze(c: CompanyInputs, *, mc_runs: int = 10_000, regime_reduce: float = 1
         "exchange": c.exchange,
         "sector": c.sector,
         "price": c.price,
+        "currency": c.currency,
         "fair_value": fair_value,
         "margin_of_safety": mos_t.result,
         "quality": quality_score,

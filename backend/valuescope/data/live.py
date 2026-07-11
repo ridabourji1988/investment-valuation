@@ -29,7 +29,7 @@ from ..engine.quality import (
     beneish_m_score, piotroski_f_score,
 )
 from ..engine.verdict import ValueTrapInputs
-from . import edgar, market, yahoo
+from . import ecb, edgar, esef, market, yahoo
 
 # Damodaran implied US equity risk premium — reference constant, reviewed with
 # releases (https://pages.stern.nyu.edu/~adamodar/, "Implied ERP").
@@ -84,6 +84,14 @@ LT_DEBT = ["LongTermDebtNoncurrent", "LongTermDebt",
            "NoncurrentBorrowings", "LongtermBorrowings"]
 DEBT_CURRENT = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings",
                 "CommercialPaper", "CurrentBorrowings", "ShorttermBorrowings"]
+# Capitalized leases are debt (Damodaran). IFRS-16 puts lease cost below
+# EBIT, so the liability must be added; US GAAP keeps OPERATING lease cost
+# inside EBIT (adding that liability would double-count) — only finance
+# leases join the debt total for us-gaap filers.
+LEASES_NONCURRENT = ["NoncurrentLeaseLiabilities",       # ifrs-full
+                     "FinanceLeaseLiabilityNoncurrent"]  # us-gaap
+LEASES_CURRENT = ["CurrentLeaseLiabilities",
+                  "FinanceLeaseLiabilityCurrent"]
 PPE = ["PropertyPlantAndEquipmentNet", "PropertyPlantAndEquipment"]
 RECEIVABLES = ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent",
                "TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"]
@@ -149,7 +157,8 @@ class _Money:
 
 
 def _listing_shares(ticker: str, facts: dict, currency: str, *,
-                    price: float, ni_usd: float | None) -> tuple[float, str]:
+                    price: float, ni_usd: float | None,
+                    direct_listing: bool = False) -> tuple[float, str]:
     """Share count consistent with the LISTING price.
 
     EDGAR reports ordinary shares; for depositary receipts the listing trades
@@ -185,7 +194,10 @@ def _listing_shares(ticker: str, facts: dict, currency: str, *,
             return scored[0][1], scored[0][2]
 
     sh, src = candidates[0]
-    if currency != "USD" and ticker not in KNOWN_ADR_RATIOS and src.startswith("EDGAR"):
+    # ESEF names trade the ordinary shares directly — the filed count IS the
+    # listing denominator; the ADR-ratio ambiguity only exists for US ADRs.
+    if (not direct_listing and currency != "USD"
+            and ticker not in KNOWN_ADR_RATIOS and src.startswith("EDGAR")):
         raise ValueError(
             f"{ticker}: foreign filer with unknown ADR ratio and no listing "
             "share count — refusing to guess the per-share denominator")
@@ -217,15 +229,31 @@ def _source_links(ticker: str, profile: dict, price_source: str,
 
 
 def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
-    """Assemble a fully live CompanyInputs. Raises on missing essentials."""
+    """Assemble a fully live CompanyInputs. Raises on missing essentials.
+
+    Two filing sources feed the same assembly: SEC EDGAR (US filers + ADRs,
+    valued in US$) and ESEF via data/esef.py (EU-only filers, valued fully in
+    EUR — statement currency, listing price and the ECB risk-free rate all
+    stay in the same currency, per Damodaran's currency-consistency rule)."""
     ticker = ticker.upper()
-    facts = edgar.company_facts(ticker)
-    profile = edgar.company_profile(ticker)
+    is_esef = esef.in_registry(ticker)
+    if is_esef:
+        facts = esef.company_facts(ticker)
+        profile = esef.company_profile(ticker)
+    else:
+        facts = edgar.company_facts(ticker)
+        profile = edgar.company_profile(ticker)
     chart = market.price_and_history(ticker)
     price = chart["price"]
     if not price or price <= 0:
         raise ValueError(f"{ticker}: no market price")
-    if chart.get("currency", "USD") != "USD":
+    listing_ccy = chart.get("currency", "USD")
+    if is_esef:
+        if listing_ccy != "EUR":
+            raise ValueError(f"{ticker}: expected a EUR listing price, "
+                             f"got {listing_ccy}")
+        risk_free = ecb.yield_10y()  # EUR cash flows -> EUR risk-free
+    elif listing_ccy != "USD":
         raise ValueError(f"{ticker}: only US-listed (US$) listings are supported — "
                          "search the US listing/ADR symbol")
 
@@ -241,9 +269,15 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         if len(derived_rev) >= 2:
             rev_raw, currency = derived_rev, gp_ccy
     if len(rev_raw) < 2 or currency is None:
-        raise ValueError(f"{ticker}: EDGAR lacks XBRL revenue "
+        raise ValueError(f"{ticker}: filings lack XBRL revenue "
                          "(bank/new entity/non-SEC filer?)")
-    fx = market.fx_to_usd(currency)
+    if is_esef:
+        if currency != "EUR":
+            raise ValueError(f"{ticker}: ESEF statements in {currency}, "
+                             "only EUR reporters are supported")
+        fx = 1.0  # valuation stays in EUR end-to-end
+    else:
+        fx = market.fx_to_usd(currency)
     money = _Money(facts, currency, fx)
     rev_s = [(end, v * fx) for end, v in rev_raw]
 
@@ -281,12 +315,15 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
 
     shares, shares_source = _listing_shares(
         ticker, facts, currency,
-        price=price, ni_usd=money.latest(NET_INCOME, flow=True))
+        price=price, ni_usd=money.latest(NET_INCOME, flow=True),
+        direct_listing=is_esef)
+    if is_esef:
+        shares_source = shares_source.replace("EDGAR", "ESEF filing")
     market_cap = price * shares
 
     # ---- capital structure --------------------------------------------------
-    lt_debt = money.latest(LT_DEBT) or 0.0
-    st_debt = money.latest(DEBT_CURRENT) or 0.0
+    lt_debt = (money.latest(LT_DEBT) or 0.0) + (money.latest(LEASES_NONCURRENT) or 0.0)
+    st_debt = (money.latest(DEBT_CURRENT) or 0.0) + (money.latest(LEASES_CURRENT) or 0.0)
     debt = lt_debt + st_debt
     cash = (money.latest(CASH) or 0.0) + (money.latest(ST_INVESTMENTS) or 0.0)
     net_debt = debt - cash
@@ -310,10 +347,16 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     rev_vals = [v for _, v in rev_s]
     yrs = len(rev_vals) - 1
     cagr = (rev_vals[-1] / rev_vals[0]) ** (1 / yrs) - 1 if rev_vals[0] > 0 else 0.0
+    growth_hist = [rev_vals[i] / rev_vals[i - 1] - 1 for i in range(1, len(rev_vals))]
+    # Base-effect guard: a depressed first year (COVID airlines: AF-KLM 2020
+    # revenue was a third of 2024's) makes point-to-point CAGR explode. The
+    # median year-over-year growth is robust to one bad endpoint and equals
+    # the CAGR for steady growers, so take the smaller of the two.
+    if len(growth_hist) >= 3:
+        cagr = min(cagr, statistics.median(growth_hist))
     # Cap at 30%: even hypergrowth fades — the model already decays growth to
     # the terminal rate after year 5 (Damodaran, Narrative and Numbers ch. 9).
     growth_initial = _clamp(cagr, 0.0, 0.30)
-    growth_hist = [rev_vals[i] / rev_vals[i - 1] - 1 for i in range(1, len(rev_vals))]
 
     margins = [e / r for (_, e), (_, r) in zip(ebit_s, rev_s[-len(ebit_s):]) if r > 0]
     margin_now = ebit / revenue
@@ -374,9 +417,17 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     else:
         idea = "turnaround"
 
-    fundamentals_src = f"SEC EDGAR annual filings (XBRL, FY {rev_s[-1][0]})"
-    if currency != "USD":
-        fundamentals_src += f", {currency} converted at {fx:.4f} US$/{currency}"
+    if is_esef:
+        fundamentals_src = (f"Official ESEF annual filings via filings.xbrl.org "
+                            f"(XBRL, FY {rev_s[-1][0]}), valued in EUR")
+        beta_src = "2Y daily regression vs S&P 500 (cross-currency)"
+        links = esef.source_links(ticker, price_source=chart["source"])
+    else:
+        fundamentals_src = f"SEC EDGAR annual filings (XBRL, FY {rev_s[-1][0]})"
+        if currency != "USD":
+            fundamentals_src += f", {currency} converted at {fx:.4f} US$/{currency}"
+        beta_src = "2Y daily regression vs S&P 500"
+        links = _source_links(ticker, profile, chart["source"], currency)
 
     return CompanyInputs(
         ticker=ticker, name=profile["name"], exchange=profile["exchange"],
@@ -392,13 +443,14 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         ncav_total_liabilities=liabilities or 0.0,
         magic_nwc=(assets_current or 0.0) - (liabilities_current or 0.0),
         magic_nfa=ppe or 0.0,
+        currency="EUR" if is_esef else "USD",
         sources={
             "fundamentals": fundamentals_src,
             "prices": chart["source"],
-            "beta": "2Y daily regression vs S&P 500",
+            "beta": beta_src,
             "shares": shares_source,
         },
-        links=_source_links(ticker, profile, chart["source"], currency),
+        links=links,
         asof=rev_s[-1][0],
     )
 

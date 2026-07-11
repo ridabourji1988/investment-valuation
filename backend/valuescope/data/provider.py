@@ -37,10 +37,14 @@ def get_price_history(ticker: str) -> list[dict]:
 
 
 def search(query: str, *, limit: int = 8) -> list[dict]:
-    """Global symbol search. SEC filers (incl. foreign ADRs on 20-F) are
-    analyzable now; other listings are shown but marked unsupported."""
-    from . import edgar as _edgar
+    """Global symbol search. SEC filers (incl. foreign ADRs on 20-F) and
+    ESEF-registry EU filers are analyzable now; other listings are shown but
+    marked unsupported."""
+    from . import edgar as _edgar, esef as _esef
     out, seen = [], set()
+    for hit in _esef.search(query, limit=limit):
+        seen.add(hit["ticker"])
+        out.append({**hit, "analyzable": True})
     for hit in _edgar.search_tickers(query, limit=limit):
         seen.add(hit["ticker"])
         out.append({**hit, "exchange": "",

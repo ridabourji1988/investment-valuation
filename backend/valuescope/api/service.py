@@ -213,7 +213,8 @@ def feed() -> dict:
         hist = a["price_history"]
         rows.append({
             "ticker": a["ticker"], "name": a["name"], "sector": a["sector"],
-            "exchange": a["exchange"], "price": a["price"], "fair_value": a["fair_value"],
+            "exchange": a["exchange"], "price": a["price"],
+            "currency": a.get("currency", "USD"), "fair_value": a["fair_value"],
             "margin_of_safety": a["margin_of_safety"], "verdict": a["verdict"]["action"],
             "quality": a["quality"], "data_quality": a["data_quality"],
             "spark": [p["close"] for p in hist[-40:]],

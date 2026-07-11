@@ -14,13 +14,18 @@ raises and the ticker is skipped and reported.
 """
 from __future__ import annotations
 
-from . import alphavantage, cboe, fx, yahoo
+from . import alphavantage, boursorama, cboe, fx, yahoo
+
+# Home-exchange suffixes of ESEF names. Cboe's free CDN and Alpha Vantage
+# only carry US listings, so EU tickers get their own chain.
+_EU_SUFFIXES = (".PA", ".AS", ".HE")
 
 
 def price_and_history(ticker: str, *, rng: str = "10y") -> dict:
     """{"price", "currency", "history", "source"}. Yahoo first (it also tells
     us the listing currency, used to reject non-US$ listings); Cboe fallback
     covers US listings only, so its currency is USD by construction.
+    EU listings chain Yahoo -> Boursorama EOD instead.
 
     Ten years by default: one cached fetch serves the current price, the full
     Max-range chart and the beta regression."""
@@ -31,8 +36,14 @@ def price_and_history(ticker: str, *, rng: str = "10y") -> dict:
         if px and px > 0 and c.get("history"):
             return {"price": float(px), "currency": c.get("currency", "USD"),
                     "history": c["history"], "source": "Yahoo Finance"}
-    except Exception:  # noqa: BLE001 — fall through to Cboe
+    except Exception:  # noqa: BLE001 — fall through to the venue fallback
         pass
+    if ticker.upper().endswith(_EU_SUFFIXES):
+        if boursorama.supports(ticker):
+            return boursorama.price_and_history(ticker, days=days)
+        raise RuntimeError(
+            f"no price source available for {ticker} (Yahoo rate-limited; "
+            "this venue has no keyless fallback yet)")
     try:
         q = cboe.quote(ticker)
         hist = cboe.history(ticker, days=days)
@@ -62,7 +73,10 @@ def _close_map(symbol: str, *, days: int) -> dict:
     try:
         hist = yahoo.fetch_chart(symbol, rng="10y")["history"][-days:]
     except Exception:  # noqa: BLE001
-        hist = cboe.history(symbol, days=days)
+        if boursorama.supports(symbol):
+            hist = boursorama.price_and_history(symbol)["history"][-days:]
+        else:
+            hist = cboe.history(symbol, days=days)
     return {row["date"]: row["close"] for row in hist if row.get("date")}
 
 

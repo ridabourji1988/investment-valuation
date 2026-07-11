@@ -63,6 +63,17 @@ DEFAULT_UNIVERSE = [
     "TCOM",
     # Latin America / Australia
     "VALE", "PBR", "MELI", "BHP",
+    # EU-only filers via official ESEF filings (data/esef.py registry; valued
+    # in EUR with the ECB risk-free rate). Suffixed = home-exchange listing.
+    # Helsinki names (KNEBV.HE, NESTE.HE, UPM.HE) stay out of the default
+    # scan: no keyless price fallback for Nasdaq Helsinki yet (Yahoo-only) —
+    # they remain searchable/analyzable on demand.
+    # AF.PA (Air France-KLM) is searchable but not scanned by default: deep
+    # cyclicals valued off post-COVID revenue trends need cycle-normalized
+    # margins first (backlog) — the model over-extrapolates their recovery.
+    "MC.PA", "RMS.PA", "OR.PA", "AIR.PA", "SU.PA", "KER.PA", "DSY.PA",
+    "EL.PA", "ML.PA", "RI.PA", "ADYEN.AS", "HEIO.AS", "ASM.AS",
+    "WKL.AS", "AD.AS",
 ]
 
 

@@ -188,6 +188,7 @@ export default function Feed({ onOpen, onMacro }) {
             onClick={retryNow}>
             {retrying ? <><span className="spinner" style={{ width: 10, height: 10 }} />Rescanning…</> : 'Retry now'}
           </button>
+          <ScannerStatus scanner={feed.scanner} />
         </div>
       )}
       {!feed.warming && feed.count > 0 && Object.keys(feed.failed || {}).length > 0 && (
@@ -245,6 +246,21 @@ export default function Feed({ onOpen, onMacro }) {
       )}
 
       <Disclaimer />
+    </div>
+  )
+}
+
+function ScannerStatus({ scanner }) {
+  if (!scanner) return null
+  const busy = scanner.queue > 0
+  return (
+    <div className="muted" style={{ fontSize: 12, marginTop: 10, display: 'flex', alignItems: 'center' }}>
+      {busy && <span className="spinner" style={{ width: 10, height: 10 }} />}
+      {busy
+        ? `Background scanner running — ${scanner.queue} companies in the queue.`
+        : scanner.cooldown_s > 0
+          ? `Background scanner waiting out a source cool-down (~${scanner.cooldown_s}s), then retries automatically.`
+          : 'Background scanner idle — next automatic retry within 5 minutes.'}
     </div>
   )
 }

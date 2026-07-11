@@ -8,6 +8,9 @@ A ticker whose sources fail is skipped and reported — never faked.
 """
 from __future__ import annotations
 
+import os
+import pickle
+import tempfile
 import threading
 import time
 
@@ -89,8 +92,12 @@ def _warm_one(ticker: str, force: bool = False) -> None:
 
 def _warm_all() -> None:
     for t in provider.list_tickers():
-        _warm_one(t)
-        time.sleep(1.0)  # courtesy pacing — burst scans trip source throttles
+        if peek_analysis(t) is None:  # persisted entries refresh via the queue
+            _warm_one(t)
+            time.sleep(1.0)  # courtesy pacing — burst scans trip source throttles
+        else:
+            _WARM["attempted"].add(t)
+    _persist_analyses()
 
 
 def _watchdog_loop() -> None:
@@ -111,9 +118,40 @@ def _watchdog_loop() -> None:
             pass
 
 
+_PERSIST_PATH = os.path.join(tempfile.gettempdir(), "valuescope-analyses.pkl")
+
+
+def _load_persisted_analyses() -> None:
+    """Restarts must not blank the app: serve last-known analyses instantly
+    (stale entries refresh in the background via the normal queue)."""
+    try:
+        with open(_PERSIST_PATH, "rb") as f:
+            data = pickle.load(f)
+        with _CACHE_LOCK:
+            for k, v in data.items():
+                _CACHE.setdefault(k, v)
+        for k in data:
+            _WARM["attempted"].add(k.split(":", 1)[1])
+    except Exception:  # noqa: BLE001 — no file / bad pickle: cold start
+        pass
+
+
+def _persist_analyses() -> None:
+    try:
+        with _CACHE_LOCK:
+            data = {k: v for k, v in _CACHE.items() if k.startswith("analysis:")}
+        tmp = _PERSIST_PATH + ".tmp"
+        with open(tmp, "wb") as f:
+            pickle.dump(data, f)
+        os.replace(tmp, _PERSIST_PATH)
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
+
+
 def ensure_warming() -> None:
     if not _WARM["started"]:
         _WARM["started"] = True
+        _load_persisted_analyses()
         threading.Thread(target=_warm_all, daemon=True).start()
         threading.Thread(target=_watchdog_loop, daemon=True).start()
 
@@ -146,6 +184,8 @@ def _drain_refresh() -> None:
             t = _REFRESH["queue"].pop()
         _warm_one(t, force=True)
         time.sleep(0.25)
+        if not _REFRESH["queue"]:
+            _persist_analyses()
 
 
 def _stale_after(ticker: str) -> float:
@@ -191,8 +231,17 @@ def feed() -> dict:
         regime_impl = dash["regime"]["result"]["implication"]
         sources = dash.get("sources", {})
 
+    # Live scanner visibility: the UI must never leave the user guessing
+    # whether anything is happening in the background.
+    from ..data import cboe as _cboe, yahoo as _yahoo
+    cooldown = int(max(0.0, _cboe._BREAKER["down_until"] - now,
+                       _yahoo._BREAKER["down_until"] - now))
+    with _REFRESH["lock"]:
+        queue = len(_REFRESH["queue"]) + (1 if _REFRESH["running"] else 0)
+
     attempted_all = _WARM["attempted"] >= set(universe)
     return _stamp({
+        "scanner": {"queue": queue, "cooldown_s": cooldown},
         "rows": rows,
         "count": len(rows),
         "buys": sum(1 for r in rows if r["verdict"] == "BUY"),

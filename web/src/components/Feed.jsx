@@ -169,6 +169,8 @@ export default function Feed({ onOpen, onMacro }) {
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             SEC filings are unaffected. ValueScope never shows simulated numbers.
           </div>
+          <button className="pill-btn" style={{ marginTop: 10, width: 'auto', padding: '0 16px' }}
+            onClick={() => api.retry().catch(() => {})}>Retry now</button>
         </div>
       )}
       {!feed.warming && feed.count > 0 && Object.keys(feed.failed || {}).length > 0 && (

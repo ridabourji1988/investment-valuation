@@ -27,6 +27,33 @@ FOMC_DATES = [
     "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-16",
 ]
 
+# Official BLS release schedules for 2026 (published reference data).
+CPI_RELEASE_DATES = [
+    "2026-01-13", "2026-02-11", "2026-03-11", "2026-04-10", "2026-05-12",
+    "2026-06-10", "2026-07-14", "2026-08-11", "2026-09-10", "2026-10-13",
+    "2026-11-12", "2026-12-10",
+]
+JOBS_RELEASE_DATES = [
+    "2026-01-09", "2026-02-06", "2026-03-06", "2026-04-03", "2026-05-08",
+    "2026-06-05", "2026-07-02", "2026-08-07", "2026-09-04", "2026-10-02",
+    "2026-11-06", "2026-12-04",
+]
+
+
+def upcoming_events(today: dt.date, n: int = 5) -> list[dict]:
+    """Next scheduled macro events — FOMC decisions, CPI prints, jobs reports."""
+    events = ([{"date": d, "event": "FOMC rate decision",
+                "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"}
+               for d in FOMC_DATES]
+              + [{"date": d, "event": "CPI release (inflation)",
+                  "url": "https://www.bls.gov/schedule/news_release/cpi.htm"}
+                 for d in CPI_RELEASE_DATES]
+              + [{"date": d, "event": "Jobs report (unemployment)",
+                  "url": "https://www.bls.gov/schedule/news_release/empsit.htm"}
+                 for d in JOBS_RELEASE_DATES])
+    future = [e for e in events if dt.date.fromisoformat(e["date"]) >= today]
+    return sorted(future, key=lambda e: e["date"])[:n]
+
 
 def _next_fomc(today: dt.date) -> str:
     for d in FOMC_DATES:
@@ -144,6 +171,7 @@ def snapshot() -> dict:
         "fed_target_low": lo,
         "fed_target_high": hi,
         "next_fomc": _next_fomc(today),
+        "upcoming_events": upcoming_events(today),
         "sources": sources,
         "links": {k: _link_for(v) for k, v in sources.items()},
     }

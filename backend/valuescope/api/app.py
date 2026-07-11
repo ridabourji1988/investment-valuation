@@ -116,6 +116,11 @@ def search(q: str) -> dict:
     return {"results": provider.search(q.strip())}
 
 
+@app.post("/api/retry")
+def retry() -> dict:
+    return service.retry_failed()
+
+
 @app.get("/api/macro")
 def get_macro() -> dict:
     try:

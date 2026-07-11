@@ -106,6 +106,24 @@ export default function Macro({ formulas }) {
         <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>CPI (YoY) {pct(m.fed.cpi_yoy)}. Path revalued weekly.</div>
       </div>
 
+      {/* Upcoming economic events */}
+      {m.upcoming_events?.length > 0 && (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="eyebrow" style={{ padding: '16px 16px 8px' }}>Upcoming economic events</div>
+          {m.upcoming_events.map((e) => (
+            <div key={e.date + e.event} className="row hairline" style={{ cursor: 'default' }}>
+              <div className="row-main">
+                <div className="row-ticker" style={{ fontSize: 15 }}>{e.event}</div>
+                <div className="row-name">
+                  <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>official schedule ↗</a>
+                </div>
+              </div>
+              <div className="tnum" style={{ fontWeight: 700 }}>{e.date}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Rate-sensitivity table */}
       {rs && (
         <div className="card" style={{ padding: 0 }}>

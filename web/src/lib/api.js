@@ -21,4 +21,5 @@ export const api = {
   rateSensitivity: (bp = 50) => get(`/api/macro/rate-sensitivity?bp=${bp}`),
   formulas: () => get('/api/formulas'),
   search: (q) => get(`/api/search?q=${encodeURIComponent(q)}`),
+  retry: () => fetch(base + '/api/retry', { method: 'POST' }).then((r) => r.json()),
 }

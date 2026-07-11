@@ -274,6 +274,7 @@ def macro_dashboard() -> dict:
             "target_low": m.get("fed_target_low"), "target_high": m.get("fed_target_high"),
             "next_fomc": m.get("next_fomc"), "cpi_yoy": m.get("cpi_yoy"),
         },
+        "upcoming_events": m.get("upcoming_events", []),
         "sources": m.get("sources", {}),
     })
     with _CACHE_LOCK:
@@ -293,6 +294,16 @@ def rate_sensitivity_table(bp: int = 50) -> list[dict]:
         r = macro_mod.rate_sensitivity(assum, bp=bp).result
         out.append({"ticker": t, "name": a["name"], "price": a["price"], **r})
     return out
+
+
+def retry_failed() -> dict:
+    """User-triggered: clear failures and re-scan everything missing NOW
+    (the watchdog does this every 5 minutes anyway)."""
+    _WARM["failed"] = {}
+    missing = [t for t in provider.list_tickers() if peek_analysis(t) is None]
+    for t in missing:
+        _refresh_async(t)
+    return {"retrying": missing}
 
 
 def status() -> dict:

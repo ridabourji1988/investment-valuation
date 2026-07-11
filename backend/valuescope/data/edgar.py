@@ -81,45 +81,94 @@ def _duration_days(item: dict) -> int | None:
         return None
 
 
+# Annual-report forms: 10-K (domestic), 20-F (foreign private issuers, IFRS),
+# 40-F (Canadian MJDS).
+_ANNUAL_FORMS = ("10-K", "20-F", "40-F")
+_NAMESPACES = ("us-gaap", "ifrs-full")
+
+
+def _extract_rows(items: list, flow: bool) -> dict[str, dict]:
+    rows: dict[str, dict] = {}
+    for it in items:
+        if not str(it.get("form", "")).startswith(_ANNUAL_FORMS):
+            continue
+        if flow:
+            d = _duration_days(it)
+            if d is None or d < 300 or d > 400:
+                continue
+        end = it.get("end")
+        if not end:
+            continue
+        prev = rows.get(end)
+        if prev is None or str(it.get("filed", "")) > str(prev.get("filed", "")):
+            rows[end] = it
+    return rows
+
+
+def _better(rows: dict, best: dict) -> bool:
+    return bool(rows) and (not best or max(rows) > max(best)
+                           or (max(rows) == max(best) and len(rows) > len(best)))
+
+
 def annual_series(facts: dict, concepts: list[str], *, unit: str = "USD",
                   flow: bool = False, n: int = 5) -> list[tuple[str, float]]:
-    """Last n fiscal-year values [(end_date, value), ...] oldest-first.
+    """Last n fiscal-year values [(end_date, value), ...] oldest-first, in a
+    FIXED unit, scanning both us-gaap and ifrs-full namespaces.
 
     Taxonomy tags vary by filer AND migrate over time (e.g. NVDA moved to
     `Revenues` while META's `Revenues` went stale years ago), so every
     candidate concept is extracted and the one with the most RECENT fiscal
     year wins — not merely the first with any rows.
 
-    flow=True keeps only ~annual durations so quarterly rows inside 10-K
+    flow=True keeps only ~annual durations so quarterly rows inside annual
     filings are excluded.
     """
     best: dict[str, dict] = {}
-    for concept in concepts:
-        try:
-            items = facts["facts"]["us-gaap"][concept]["units"][unit]
-        except KeyError:
-            continue
-        rows: dict[str, dict] = {}
-        for it in items:
-            if not str(it.get("form", "")).startswith("10-K"):
+    for ns in _NAMESPACES:
+        for concept in concepts:
+            try:
+                items = facts["facts"][ns][concept]["units"][unit]
+            except KeyError:
                 continue
-            if flow:
-                d = _duration_days(it)
-                if d is None or d < 300 or d > 400:
-                    continue
-            end = it.get("end")
-            if not end:
-                continue
-            prev = rows.get(end)
-            if prev is None or str(it.get("filed", "")) > str(prev.get("filed", "")):
-                rows[end] = it
-        if rows and (not best or max(rows) > max(best)
-                     or (max(rows) == max(best) and len(rows) > len(best))):
-            best = rows
+            rows = _extract_rows(items, flow)
+            if _better(rows, best):
+                best = rows
     if not best:
         return []
     ordered = sorted(best)[-n:]
     return [(end, float(best[end]["val"])) for end in ordered]
+
+
+def monetary_series(facts: dict, concepts: list[str], *, currency: str | None = None,
+                    flow: bool = False, n: int = 5) -> tuple[list[tuple[str, float]], str | None]:
+    """Like annual_series but currency-aware: IFRS filers report in their home
+    currency (SAP in EUR, TSM in TWD). Returns (series, currency).
+
+    With `currency` set, only that unit is considered — pass the revenue
+    currency to every later fetch so all statement items stay consistent.
+    Without it, the best (most recent, then longest) series across all
+    currency units wins.
+    """
+    best: dict[str, dict] = {}
+    best_ccy: str | None = None
+    for ns in _NAMESPACES:
+        for concept in concepts:
+            try:
+                units = facts["facts"][ns][concept]["units"]
+            except KeyError:
+                continue
+            for unit_name, items in units.items():
+                if "/" in unit_name or len(unit_name) != 3:  # skip USD/shares, pure counts
+                    continue
+                if currency and unit_name.upper() != currency.upper():
+                    continue
+                rows = _extract_rows(items, flow)
+                if _better(rows, best):
+                    best, best_ccy = rows, unit_name.upper()
+    if not best:
+        return [], None
+    ordered = sorted(best)[-n:]
+    return [(end, float(best[end]["val"])) for end in ordered], best_ccy
 
 
 def latest_annual(facts: dict, concepts: list[str], *, unit: str = "USD",
@@ -146,3 +195,28 @@ def shares_outstanding(facts: dict) -> float | None:
         if s and s[-1][1] > 0:
             return s[-1][1]
     return None
+
+
+def search_tickers(query: str, *, limit: int = 8) -> list[dict]:
+    """Search SEC filers by ticker or company name (every hit is analyzable)."""
+    q = query.strip().upper()
+    if not q:
+        return []
+    table = _ticker_table()
+    ql = q.lower()
+    exact, prefix, name_match = [], [], []
+    for tk, (cik, title) in table.items():
+        if tk == q:
+            exact.append((tk, title))
+        elif tk.startswith(q):
+            prefix.append((tk, title))
+        # Word-prefix match on the company name ("sap" -> "SAP SE", not
+        # "Che-sap-eake").
+        elif any(w.startswith(ql) for w in title.lower().split()):
+            name_match.append((tk, title))
+    hits = exact + sorted(prefix)[:limit] + sorted(name_match, key=lambda x: len(x[1]))[:limit]
+    return [{"ticker": tk, "name": title, "source": "edgar"} for tk, title in hits[:limit]]
+
+
+def has_ticker(ticker: str) -> bool:
+    return ticker.upper() in _ticker_table()

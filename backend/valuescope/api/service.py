@@ -89,13 +89,29 @@ def _warm_one(ticker: str, force: bool = False) -> None:
 def _warm_all() -> None:
     for t in provider.list_tickers():
         _warm_one(t)
-        time.sleep(0.2)  # courtesy pacing for EDGAR
+        time.sleep(0.5)  # courtesy pacing for EDGAR and Yahoo
+
+
+def _watchdog_loop() -> None:
+    """Self-healing: retry tickers that failed (source outage, rate limit)
+    every 5 minutes, forever. Autonomy means failures recover without anyone
+    touching anything."""
+    while True:
+        time.sleep(300)
+        try:
+            missing = [t for t in provider.list_tickers() if peek_analysis(t) is None]
+            for t in missing:
+                _warm_one(t)
+                time.sleep(0.5)
+        except Exception:  # noqa: BLE001 — watchdog must never die
+            pass
 
 
 def ensure_warming() -> None:
     if not _WARM["started"]:
         _WARM["started"] = True
         threading.Thread(target=_warm_all, daemon=True).start()
+        threading.Thread(target=_watchdog_loop, daemon=True).start()
 
 
 def warm_cache() -> None:

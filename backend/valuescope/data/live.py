@@ -1,12 +1,17 @@
 """Autonomous company assembly: SEC EDGAR + Yahoo -> CompanyInputs.
 
+Covers US filers (10-K, us-gaap) AND foreign private issuers listed in the US
+(20-F/40-F, ifrs-full) — which brings most large European and emerging-market
+companies (SAP, ASML, TSM, Shell, Novo Nordisk, Alibaba, Vale, Infosys…) into
+scope with the same SEC-grade data. IFRS filers report in their home currency;
+every monetary item is converted to US$ at the live spot rate so statements,
+market cap and per-share values stay consistent.
+
 Zero configuration and zero synthetic numbers. Every figure is either
 (a) read from an SEC filing (XBRL companyfacts, multi-tag candidates because
-    taxonomy names vary by filer),
-(b) observed in the market (price, regression beta vs the S&P 500), or
-(c) a documented, versioned modelling assumption derived from those two
-    (growth from filed revenue history, target margin from filed margins,
-    stable WACC = Rf + mature-market premium, terminal growth capped at Rf).
+    taxonomy names vary by filer and by GAAP/IFRS),
+(b) observed in the market (price, FX, regression beta vs the S&P 500), or
+(c) a documented, versioned modelling assumption derived from those two.
 
 Forensic scores (Piotroski/Altman/Beneish) need two fiscal years of specific
 tags; when a filer doesn't report a tag, that score is skipped and
@@ -32,53 +37,110 @@ ERP = 0.045
 # (Damodaran, fcffsimpleginzu: stable cost of capital ≈ Rf + 4.5%).
 MATURE_WACC_PREMIUM = 0.045
 
-# XBRL concept candidates, in preference order.
+# Ordinary shares per depositary receipt for well-known US-listed foreign
+# issuers (public reference facts, used when Yahoo's listing share count is
+# unavailable). EDGAR reports ORDINARY shares; the listing price is per ADS.
+KNOWN_ADR_RATIOS = {
+    "TSM": 5.0, "SHEL": 2.0, "BABA": 8.0, "SAP": 1.0, "NVO": 1.0,
+    "INFY": 1.0, "VALE": 1.0, "ASML": 1.0, "SONY": 1.0, "UL": 1.0,
+}
+
+# XBRL concept candidates, in preference order — us-gaap then ifrs-full names
+# (both namespaces are scanned; recency picks the winner).
 REVENUE = ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
-           "SalesRevenueNet", "SalesRevenueGoodsNet"]
-EBIT = ["OperatingIncomeLoss"]
-COSTS_AND_EXPENSES = ["CostsAndExpenses"]  # EBIT fallback: revenue − total costs
-NET_INCOME = ["NetIncomeLoss"]
-CFO = ["NetCashProvidedByUsedInOperatingActivities"]
-CAPEX = ["PaymentsToAcquirePropertyPlantAndEquipment"]
+           "SalesRevenueNet", "SalesRevenueGoodsNet",
+           "Revenue", "RevenueFromContractsWithCustomers"]
+EBIT = ["OperatingIncomeLoss", "ProfitLossFromOperatingActivities", "OperatingProfitLoss"]
+COSTS_AND_EXPENSES = ["CostsAndExpenses"]
+NET_INCOME = ["NetIncomeLoss", "ProfitLoss"]
+CFO = ["NetCashProvidedByUsedInOperatingActivities",
+       "CashFlowsFromUsedInOperatingActivities"]
+CAPEX = ["PaymentsToAcquirePropertyPlantAndEquipment",
+         "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"]
 ASSETS = ["Assets"]
-ASSETS_CURRENT = ["AssetsCurrent"]
+ASSETS_CURRENT = ["AssetsCurrent", "CurrentAssets"]
 LIABILITIES = ["Liabilities"]
-LIABILITIES_CURRENT = ["LiabilitiesCurrent"]
+LIABILITIES_CURRENT = ["LiabilitiesCurrent", "CurrentLiabilities"]
 EQUITY = ["StockholdersEquity",
-          "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
+          "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+          "Equity", "EquityAttributableToOwnersOfParent"]
 CASH = ["CashAndCashEquivalentsAtCarryingValue",
-        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"]
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        "CashAndCashEquivalents"]
 ST_INVESTMENTS = ["ShortTermInvestments", "MarketableSecuritiesCurrent",
-                  "AvailableForSaleSecuritiesCurrent"]
-LT_DEBT = ["LongTermDebtNoncurrent", "LongTermDebt"]
-DEBT_CURRENT = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "CommercialPaper"]
-PPE = ["PropertyPlantAndEquipmentNet"]
-RECEIVABLES = ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"]
-COGS = ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold"]
-SGA = ["SellingGeneralAndAdministrativeExpense"]
+                  "AvailableForSaleSecuritiesCurrent", "CurrentFinancialAssets"]
+LT_DEBT = ["LongTermDebtNoncurrent", "LongTermDebt",
+           "NoncurrentBorrowings", "LongtermBorrowings"]
+DEBT_CURRENT = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings",
+                "CommercialPaper", "CurrentBorrowings", "ShorttermBorrowings"]
+PPE = ["PropertyPlantAndEquipmentNet", "PropertyPlantAndEquipment"]
+RECEIVABLES = ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent",
+               "TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"]
+COGS = ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold", "CostOfSales"]
+SGA = ["SellingGeneralAndAdministrativeExpense",
+       "SellingGeneralAndAdministrativeExpenses", "AdministrativeExpense"]
 DEPRECIATION = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet",
-                "DepreciationAndAmortization", "Depreciation"]
-TAX = ["IncomeTaxExpenseBenefit"]
+                "DepreciationAndAmortization", "Depreciation",
+                "DepreciationAndAmortisationExpense"]
+TAX = ["IncomeTaxExpenseBenefit", "IncomeTaxExpenseContinuingOperations"]
 PRETAX = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
-          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"]
+          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+          "ProfitLossBeforeTax"]
 INTEREST = ["InterestExpense", "InterestExpenseDebt", "InterestExpenseNonoperating",
-            "InterestAndDebtExpense"]
-RETAINED = ["RetainedEarningsAccumulatedDeficit"]
-DILUTED_SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding"]
+            "InterestAndDebtExpense", "FinanceCosts"]
+RETAINED = ["RetainedEarningsAccumulatedDeficit", "RetainedEarnings"]
+DILUTED_SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding",
+                  "AdjustedWeightedAverageShares", "WeightedAverageShares"]
 
 
 def _clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
 
-def _vals(series):
-    return [v for _, v in series]
+class _Money:
+    """Currency-consistent, US$-converted access to EDGAR statement items."""
+
+    def __init__(self, facts: dict, currency: str, fx: float):
+        self.facts, self.currency, self.fx = facts, currency, fx
+
+    def series(self, concepts, *, flow=False, n=5):
+        s, _ = edgar.monetary_series(self.facts, concepts, currency=self.currency,
+                                     flow=flow, n=n)
+        return [(end, v * self.fx) for end, v in s]
+
+    def latest(self, concepts, *, flow=False):
+        s = self.series(concepts, flow=flow, n=1)
+        return s[-1][1] if s else None
+
+    def pair(self, concepts, *, flow=False):
+        v = [x for _, x in self.series(concepts, flow=flow)]
+        return (v[-2], v[-1]) if len(v) >= 2 else None
 
 
-def _pair(series):
-    """(prior, current) from a fiscal-year series, or None."""
-    v = _vals(series)
-    return (v[-2], v[-1]) if len(v) >= 2 else None
+def _listing_shares(ticker: str, facts: dict, currency: str) -> tuple[float, str]:
+    """Share count consistent with the LISTING price.
+
+    EDGAR reports ordinary shares; for depositary receipts the listing trades
+    ADSs, so the ordinary count must be divided by the ADR ratio. Preference:
+    Yahoo's listing share count (already ADS-equivalent) -> EDGAR ÷ known
+    ratio -> EDGAR as-is (domestic filers)."""
+    edgar_shares = edgar.shares_outstanding(facts)
+    yahoo_shares = yahoo.listing_shares(ticker)
+    if yahoo_shares:
+        # Guard against unit disagreements: trust Yahoo when it's within 20x
+        # of EDGAR either way (it always is for sane listings).
+        if not edgar_shares or 0.05 < yahoo_shares / edgar_shares < 20:
+            return yahoo_shares, "Yahoo listing share count"
+    if edgar_shares and ticker in KNOWN_ADR_RATIOS:
+        return edgar_shares / KNOWN_ADR_RATIOS[ticker], \
+            f"EDGAR ÷ ADR ratio {KNOWN_ADR_RATIOS[ticker]:.0f}"
+    if edgar_shares:
+        if currency != "USD":
+            raise ValueError(
+                f"{ticker}: foreign filer with unknown ADR ratio and no listing "
+                "share count — refusing to guess the per-share denominator")
+        return edgar_shares, "EDGAR dei shares outstanding"
+    raise ValueError(f"{ticker}: no share count available")
 
 
 def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
@@ -90,64 +152,72 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     price = chart["price"]
     if not price or price <= 0:
         raise ValueError(f"{ticker}: no market price")
+    if chart.get("currency", "USD") != "USD":
+        raise ValueError(f"{ticker}: only US-listed (US$) listings are supported — "
+                         "search the US listing/ADR symbol")
 
-    # ---- essentials ---------------------------------------------------------
-    rev_s = edgar.annual_series(facts, REVENUE, flow=True)
-    ebit_s = edgar.annual_series(facts, EBIT, flow=True)
-    if not ebit_s or (rev_s and ebit_s[-1][0] < rev_s[-1][0]):
-        # Filers that report no operating-income line (CVX) or stopped years
-        # ago (JNJ after 2014). Fallback 1: revenue − total costs, aligned by
-        # fiscal year end.
-        costs = dict(edgar.annual_series(facts, COSTS_AND_EXPENSES, flow=True))
+    # ---- statement currency & essentials ------------------------------------
+    rev_raw, currency = edgar.monetary_series(facts, REVENUE, flow=True)
+    if len(rev_raw) < 2 or currency is None:
+        raise ValueError(f"{ticker}: EDGAR lacks XBRL revenue "
+                         "(bank/new entity/non-SEC filer?)")
+    fx = yahoo.fx_to_usd(currency)
+    money = _Money(facts, currency, fx)
+    rev_s = [(end, v * fx) for end, v in rev_raw]
+
+    ebit_s = money.series(EBIT, flow=True)
+    if not ebit_s or ebit_s[-1][0] < rev_s[-1][0]:
+        # No operating-income line (CVX) or it went stale (JNJ post-2014).
+        # Fallback 1: revenue − total costs, aligned by fiscal year end.
+        costs = dict(money.series(COSTS_AND_EXPENSES, flow=True))
         derived = [(end, rev - costs[end]) for end, rev in rev_s if end in costs]
         if not derived or (ebit_s and derived[-1][0] <= ebit_s[-1][0]):
-            # Fallback 2: EBIT ≈ pretax income + interest expense (slightly
-            # overstates when interest income is material; bounded below).
-            pretax = dict(edgar.annual_series(facts, PRETAX, flow=True))
-            interest = dict(edgar.annual_series(facts, INTEREST, flow=True))
-            derived = [(end, pretax[end] + interest.get(end, 0.0)) for end in sorted(pretax)]
+            # Fallback 2: EBIT ≈ pretax income + interest expense.
+            pretax_s = dict(money.series(PRETAX, flow=True))
+            interest_s = dict(money.series(INTEREST, flow=True))
+            derived = [(end, pretax_s[end] + interest_s.get(end, 0.0))
+                       for end in sorted(pretax_s)]
         if derived and (not ebit_s or derived[-1][0] > ebit_s[-1][0]):
             ebit_s = derived
-    shares = edgar.shares_outstanding(facts)
-    if len(rev_s) < 2 or not ebit_s or not shares:
-        raise ValueError(f"{ticker}: EDGAR lacks XBRL revenue/EBIT/shares "
-                         "(bank/new entity/foreign filer?)")
+    if not ebit_s:
+        raise ValueError(f"{ticker}: cannot establish operating income from filings")
+
     revenue = rev_s[-1][1]
     ebit = ebit_s[-1][1]
-    # Consistency guard: revenue and EBIT must describe the same fiscal year —
-    # tag migrations can otherwise pair a stale series with a current one.
     if rev_s[-1][0] != ebit_s[-1][0]:
         raise ValueError(f"{ticker}: revenue ({rev_s[-1][0]}) and EBIT ({ebit_s[-1][0]}) "
                          "series end in different fiscal years")
     if not (-0.5 < ebit / revenue < 0.65):
         raise ValueError(f"{ticker}: implausible operating margin "
                          f"{ebit / revenue:.0%} — inconsistent XBRL series")
+
+    shares, shares_source = _listing_shares(ticker, facts, currency)
     market_cap = price * shares
 
     # ---- capital structure --------------------------------------------------
-    lt_debt = edgar.latest_annual(facts, LT_DEBT) or 0.0
-    st_debt = edgar.latest_annual(facts, DEBT_CURRENT) or 0.0
+    lt_debt = money.latest(LT_DEBT) or 0.0
+    st_debt = money.latest(DEBT_CURRENT) or 0.0
     debt = lt_debt + st_debt
-    cash = (edgar.latest_annual(facts, CASH) or 0.0) + (edgar.latest_annual(facts, ST_INVESTMENTS) or 0.0)
+    cash = (money.latest(CASH) or 0.0) + (money.latest(ST_INVESTMENTS) or 0.0)
     net_debt = debt - cash
     debt_to_equity = debt / market_cap if market_cap > 0 else 0.0
 
     # ---- rates & beta -------------------------------------------------------
-    tax = edgar.latest_annual(facts, TAX, flow=True)
-    pretax = edgar.latest_annual(facts, PRETAX, flow=True)
+    tax = money.latest(TAX, flow=True)
+    pretax = money.latest(PRETAX, flow=True)
     tax_rate = _clamp(tax / pretax, 0.10, 0.35) if (tax and pretax and pretax > 0) else 0.21
 
     beta_levered = yahoo.regression_beta(ticker)          # observed vs S&P 500
     beta_u = unlever_beta(beta_levered, tax_rate, debt_to_equity)
 
-    interest = edgar.latest_annual(facts, INTEREST, flow=True)
+    interest = money.latest(INTEREST, flow=True)
     if interest and debt > 0:
         cost_of_debt = _clamp(interest / debt, risk_free + 0.005, risk_free + 0.05)
     else:
         cost_of_debt = risk_free + 0.01
 
     # ---- growth & margins (from filed history) ------------------------------
-    rev_vals = _vals(rev_s)
+    rev_vals = [v for _, v in rev_s]
     yrs = len(rev_vals) - 1
     cagr = (rev_vals[-1] / rev_vals[0]) ** (1 / yrs) - 1 if rev_vals[0] > 0 else 0.0
     # Cap at 30%: even hypergrowth fades — the model already decays growth to
@@ -159,7 +229,7 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     margin_now = ebit / revenue
     target_margin = _clamp(max(margin_now, statistics.median(margins)), 0.03, 0.45)
 
-    equity_book = edgar.latest_annual(facts, EQUITY)
+    equity_book = money.latest(EQUITY)
     invested_capital = (equity_book or market_cap * 0.5) + debt - cash
     if invested_capital <= 0:
         invested_capital = revenue / 2.0
@@ -170,20 +240,19 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     growth_terminal = min(0.025, risk_free)
 
     # ---- balance-sheet extras ------------------------------------------------
-    assets = edgar.latest_annual(facts, ASSETS)
-    assets_current = edgar.latest_annual(facts, ASSETS_CURRENT)
-    liabilities = edgar.latest_annual(facts, LIABILITIES)
-    liabilities_current = edgar.latest_annual(facts, LIABILITIES_CURRENT)
-    ppe = edgar.latest_annual(facts, PPE)
-    ni = edgar.latest_annual(facts, NET_INCOME, flow=True)
-    cfo = edgar.latest_annual(facts, CFO, flow=True)
-    da = edgar.latest_annual(facts, DEPRECIATION, flow=True)
-    capex = edgar.latest_annual(facts, CAPEX, flow=True)
+    assets_current = money.latest(ASSETS_CURRENT)
+    liabilities = money.latest(LIABILITIES)
+    liabilities_current = money.latest(LIABILITIES_CURRENT)
+    ppe = money.latest(PPE)
+    ni = money.latest(NET_INCOME, flow=True)
+    cfo = money.latest(CFO, flow=True)
+    da = money.latest(DEPRECIATION, flow=True)
+    capex = money.latest(CAPEX, flow=True)
 
     # ---- forensic scores (skip when filer omits tags) ------------------------
-    piotroski = _build_piotroski(facts)
-    altman = _build_altman(facts, market_cap)
-    beneish = _build_beneish(facts)
+    piotroski = _build_piotroski(money, facts)
+    altman = _build_altman(money, market_cap)
+    beneish = _build_beneish(money)
 
     quality = QualityInputs(
         roic=roic, wacc=0.0,  # WACC injected by analyze()
@@ -194,12 +263,16 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         net_income=ni or 1.0,
     )
 
-    trap = _build_trap(facts, margins=margins, debt_now=debt, roic=roic,
+    trap = _build_trap(money, rev_s=rev_s, margins=margins, debt_now=debt, roic=roic,
                        wacc_terminal=wacc_terminal, ni=ni, cfo=cfo, capex=capex,
                        da=da, piotroski=piotroski, beneish=beneish)
 
     missing_scores = sum(1 for s in (piotroski, altman, beneish) if s is None)
     data_quality = "high" if missing_scores == 0 else ("medium" if missing_scores == 1 else "low")
+    # Valuation sanity: an implausible implied P/E usually means a share-count
+    # or currency inconsistency — flag rather than hide.
+    if ni and ni > 0 and not (1.0 < market_cap / ni < 200.0):
+        data_quality = "low"
 
     if growth_initial >= 0.12:
         idea = "compounder"
@@ -209,6 +282,10 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         idea = "mean_reversion"
     else:
         idea = "turnaround"
+
+    fundamentals_src = f"SEC EDGAR annual filings (XBRL, FY {rev_s[-1][0]})"
+    if currency != "USD":
+        fundamentals_src += f", {currency} converted at {fx:.4f} US$/{currency}"
 
     return CompanyInputs(
         ticker=ticker, name=profile["name"], exchange=profile["exchange"],
@@ -225,25 +302,30 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         magic_nwc=(assets_current or 0.0) - (liabilities_current or 0.0),
         magic_nfa=ppe or 0.0,
         sources={
-            "fundamentals": f"SEC EDGAR 10-K (XBRL, FY {rev_s[-1][0]})",
+            "fundamentals": fundamentals_src,
             "prices": "Yahoo Finance (live)",
             "beta": "2Y daily regression vs S&P 500 (Yahoo)",
+            "shares": shares_source,
         },
         asof=rev_s[-1][0],
     )
 
 
 # --------------------------------------------------------------------------- #
-def _build_piotroski(facts) -> PiotroskiInputs | None:
-    ni = _pair(edgar.annual_series(facts, NET_INCOME, flow=True))
-    cfo = _pair(edgar.annual_series(facts, CFO, flow=True))
-    ta = _pair(edgar.annual_series(facts, ASSETS))
-    ltd = _pair(edgar.annual_series(facts, LT_DEBT))
-    ca = _pair(edgar.annual_series(facts, ASSETS_CURRENT))
-    cl = _pair(edgar.annual_series(facts, LIABILITIES_CURRENT))
-    sh = _pair(edgar.annual_series(facts, DILUTED_SHARES, unit="shares", flow=True))
-    rev = _pair(edgar.annual_series(facts, REVENUE, flow=True))
-    cogs = _pair(edgar.annual_series(facts, COGS, flow=True))
+def _build_piotroski(money: _Money, facts: dict) -> PiotroskiInputs | None:
+    ni = money.pair(NET_INCOME, flow=True)
+    cfo = money.pair(CFO, flow=True)
+    ta = money.pair(ASSETS)
+    ltd = money.pair(LT_DEBT)
+    ca = money.pair(ASSETS_CURRENT)
+    cl = money.pair(LIABILITIES_CURRENT)
+    sh = None
+    s = edgar.annual_series(facts, DILUTED_SHARES, unit="shares", flow=True)
+    v = [x for _, x in s]
+    if len(v) >= 2:
+        sh = (v[-2], v[-1])
+    rev = money.pair(REVENUE, flow=True)
+    cogs = money.pair(COGS, flow=True)
     if not all((ni, cfo, ta, ca, cl, rev, cogs)):
         return None
     ltd = ltd or (0.0, 0.0)
@@ -263,14 +345,14 @@ def _build_piotroski(facts) -> PiotroskiInputs | None:
     )
 
 
-def _build_altman(facts, market_cap: float) -> AltmanInputs | None:
-    ca = edgar.latest_annual(facts, ASSETS_CURRENT)
-    cl = edgar.latest_annual(facts, LIABILITIES_CURRENT)
-    re = edgar.latest_annual(facts, RETAINED)
-    ebit = edgar.latest_annual(facts, EBIT, flow=True)
-    tl = edgar.latest_annual(facts, LIABILITIES)
-    sales = edgar.latest_annual(facts, REVENUE, flow=True)
-    ta = edgar.latest_annual(facts, ASSETS)
+def _build_altman(money: _Money, market_cap: float) -> AltmanInputs | None:
+    ca = money.latest(ASSETS_CURRENT)
+    cl = money.latest(LIABILITIES_CURRENT)
+    re = money.latest(RETAINED)
+    ebit = money.latest(EBIT, flow=True)
+    tl = money.latest(LIABILITIES)
+    sales = money.latest(REVENUE, flow=True)
+    ta = money.latest(ASSETS)
     if None in (ca, cl, re, ebit, tl, sales, ta) or not ta or not tl:
         return None
     return AltmanInputs(working_capital=ca - cl, retained_earnings=re, ebit=ebit,
@@ -278,19 +360,19 @@ def _build_altman(facts, market_cap: float) -> AltmanInputs | None:
                         sales=sales, total_assets=ta)
 
 
-def _build_beneish(facts) -> BeneishInputs | None:
-    rec = _pair(edgar.annual_series(facts, RECEIVABLES))
-    rev = _pair(edgar.annual_series(facts, REVENUE, flow=True))
-    cogs = _pair(edgar.annual_series(facts, COGS, flow=True))
-    ca = _pair(edgar.annual_series(facts, ASSETS_CURRENT))
-    ppe = _pair(edgar.annual_series(facts, PPE))
-    ta = _pair(edgar.annual_series(facts, ASSETS))
-    dep = _pair(edgar.annual_series(facts, DEPRECIATION, flow=True))
-    sga = _pair(edgar.annual_series(facts, SGA, flow=True))
-    cl = _pair(edgar.annual_series(facts, LIABILITIES_CURRENT))
-    ltd = _pair(edgar.annual_series(facts, LT_DEBT))
-    ni = edgar.latest_annual(facts, NET_INCOME, flow=True)
-    cfo = edgar.latest_annual(facts, CFO, flow=True)
+def _build_beneish(money: _Money) -> BeneishInputs | None:
+    rec = money.pair(RECEIVABLES)
+    rev = money.pair(REVENUE, flow=True)
+    cogs = money.pair(COGS, flow=True)
+    ca = money.pair(ASSETS_CURRENT)
+    ppe = money.pair(PPE)
+    ta = money.pair(ASSETS)
+    dep = money.pair(DEPRECIATION, flow=True)
+    sga = money.pair(SGA, flow=True)
+    cl = money.pair(LIABILITIES_CURRENT)
+    ltd = money.pair(LT_DEBT)
+    ni = money.latest(NET_INCOME, flow=True)
+    cfo = money.latest(CFO, flow=True)
     if not all((rec, rev, cogs, ca, ppe, ta, dep, sga, cl)) or ni is None or cfo is None:
         return None
     ltd = ltd or (0.0, 0.0)
@@ -309,10 +391,10 @@ def _build_beneish(facts) -> BeneishInputs | None:
     )
 
 
-def _build_trap(facts, *, margins, debt_now, roic, wacc_terminal, ni, cfo, capex, da,
-                piotroski, beneish) -> ValueTrapInputs:
-    rev = _vals(edgar.annual_series(facts, REVENUE, flow=True))
-    debt_pair = _pair(edgar.annual_series(facts, LT_DEBT)) or (debt_now, debt_now)
+def _build_trap(money: _Money, *, rev_s, margins, debt_now, roic, wacc_terminal,
+                ni, cfo, capex, da, piotroski, beneish) -> ValueTrapInputs:
+    rev = [v for _, v in rev_s]
+    debt_pair = money.pair(LT_DEBT) or (debt_now, debt_now)
     fcf = (cfo - (capex if capex is not None else (da or 0.0))) if cfo is not None else None
 
     high_beneish = False

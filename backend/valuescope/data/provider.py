@@ -34,3 +34,25 @@ def get_company(ticker: str) -> CompanyInputs:
 
 def get_price_history(ticker: str) -> list[dict]:
     return yahoo.fetch_chart(ticker.upper(), rng="1y")["history"]
+
+
+def search(query: str, *, limit: int = 8) -> list[dict]:
+    """Global symbol search. SEC filers (incl. foreign ADRs on 20-F) are
+    analyzable now; other listings are shown but marked unsupported."""
+    from . import edgar as _edgar
+    out, seen = [], set()
+    for hit in _edgar.search_tickers(query, limit=limit):
+        seen.add(hit["ticker"])
+        out.append({**hit, "exchange": "", "analyzable": True})
+    try:
+        for hit in yahoo.search(query, count=limit):
+            tk = (hit["ticker"] or "").upper()
+            if not tk or tk in seen:
+                continue
+            seen.add(tk)
+            analyzable = _edgar.has_ticker(tk)
+            out.append({"ticker": tk, "name": hit["name"], "exchange": hit["exchange"],
+                        "source": "yahoo", "analyzable": analyzable})
+    except Exception:  # noqa: BLE001 — EDGAR-only results still useful
+        pass
+    return out[:limit]

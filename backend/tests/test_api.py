@@ -86,6 +86,16 @@ def test_unknown_ticker_404():
     assert client.get("/api/asset/ZZZZ").status_code == 404
 
 
+def test_search_endpoint(monkeypatch):
+    monkeypatch.setattr(provider, "search",
+                        lambda q, limit=8: [{"ticker": "SAP", "name": "SAP SE",
+                                             "source": "edgar", "exchange": "NYSE",
+                                             "analyzable": True}])
+    r = client.get("/api/search?q=sap").json()
+    assert r["results"][0]["ticker"] == "SAP"
+    assert r["results"][0]["analyzable"] is True
+
+
 def test_formulas_all_cited():
     fm = client.get("/api/formulas").json()["formulas"]
     assert len(fm) >= 18

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback } from 'react'
-import { formatInput, num } from '../lib/format'
+import { formatInput, formatValue, num } from '../lib/format'
+import { InlineSeries } from './Charts'
 
 // Context carries the asset's traces (keyed by metric_id) and the formula
 // registry, so any <Calc> can open its trace and drill into computed inputs.
@@ -85,7 +86,7 @@ function CalcSheet({ trace, depth, onBack, onClose }) {
                           <span className="drill" onClick={() => ctx.open(inp.trace_id)}> ↗</span>
                         )}
                       </td>
-                      <td className="tnum">{formatInput(inp.value, inp.unit)}</td>
+                      <td className="tnum"><InputValue value={inp.value} unit={inp.unit} /></td>
                       <td className="src">
                         {inp.source_type}{inp.source_ref ? ` · ${inp.source_ref}` : ''}
                         {inp.asof ? ` (${inp.asof})` : ''}
@@ -104,13 +105,10 @@ function CalcSheet({ trace, depth, onBack, onClose }) {
               {trace.steps.map((s, i) => (
                 <div className="step" key={i}>
                   <span>{s.label} <span className="expr">{s.expression}</span></span>
-                  <span className="tnum">{fmtStep(s.value)}</span>
+                  <span className="tnum">{formatValue(s.value)}</span>
                 </div>
               ))}
-              <div className="result-line">
-                <span>Result</span>
-                <span className="tnum">{fmtStep(trace.result)} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{trace.unit}</span></span>
-              </div>
+              <ResultBlock result={trace.result} unit={trace.unit} />
             </div>
           )}
 
@@ -141,12 +139,69 @@ function CalcSheet({ trace, depth, onBack, onClose }) {
   )
 }
 
-function fmtStep(v) {
-  if (typeof v === 'boolean') return v ? 'true' : 'false'
-  if (typeof v === 'number') {
-    if (Math.abs(v) > 0 && Math.abs(v) < 1) return num(v, 4)
-    return num(v, Math.abs(v) >= 1000 ? 0 : 2)
+function InputValue({ value, unit }) {
+  if (Array.isArray(value) && value.length > 4 && value.every((v) => typeof v === 'number')) {
+    return (
+      <span>
+        <InlineSeries values={value} />
+        <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+          last {formatInput(value[value.length - 1], unit)}
+        </span>
+      </span>
+    )
   }
-  if (v && typeof v === 'object') return JSON.stringify(v)
-  return String(v)
+  if (value === null || value === undefined) {
+    return <span className="badge warn">unavailable</span>
+  }
+  return <>{formatInput(value, unit)}</>
+}
+
+// Dict results (regime, Monte Carlo, scores…) render as labelled rows, never
+// as raw JSON. Booleans become status dots; nested dicts become sub-lists.
+function ResultBlock({ result, unit }) {
+  if (result === null || result === undefined || typeof result !== 'object') {
+    return (
+      <div className="result-line">
+        <span>Result</span>
+        <span className="tnum">{formatValue(result)}{' '}
+          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{unit}</span></span>
+      </div>
+    )
+  }
+  const scalar = Object.entries(result).filter(([, v]) => typeof v !== 'object' || v === null)
+  const nested = Object.entries(result).filter(([, v]) => v && typeof v === 'object')
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="result-line" style={{ paddingBottom: 8 }}>
+        <span>Result</span>
+        <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{unit}</span>
+      </div>
+      {scalar.map(([k, v]) => (
+        <div className="step" key={k}>
+          <span>{labelize(k)}</span>
+          <span className="tnum">{formatValue(v)}</span>
+        </div>
+      ))}
+      {nested.map(([k, obj]) => (
+        <div key={k} style={{ margin: '8px 0' }}>
+          <div className="h" style={{ color: 'var(--gray)', fontSize: 12, margin: '6px 0 2px' }}>{labelize(k)}</div>
+          {Object.entries(obj).map(([kk, vv]) => (
+            <div className="step" key={kk}>
+              <span>{labelize(kk)}</span>
+              {typeof vv === 'boolean' ? (
+                <span><span className="dot" style={{ background: vv ? 'var(--blue)' : 'var(--elev)', marginRight: 6 }} />{vv ? 'yes' : 'no'}</span>
+              ) : (
+                <span className="tnum">{formatValue(vv)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function labelize(key) {
+  const nice = String(key).replace(/_/g, ' ')
+  return nice.charAt(0).toUpperCase() + nice.slice(1)
 }

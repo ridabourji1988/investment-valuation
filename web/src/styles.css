@@ -165,3 +165,54 @@ table.inputs .src { color: var(--gray); font-size: 12px; }
 .loading { color: var(--gray); text-align: center; padding: 60px 20px; }
 .muted { color: var(--gray); }
 a { color: var(--blue); text-decoration: none; }
+
+/* ---------- Tag chips ---------- */
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+  border-radius: 999px; background: var(--elev); color: var(--gray2); margin-right: 6px; }
+.tag.green { background: #32d74b22; color: var(--green); }
+.tag.red { background: #ff453a22; color: var(--red); }
+.tag.amber { background: #ffd60a22; color: var(--amber); }
+.tag.blue { background: #0a84ff22; color: var(--blue); }
+
+/* MoS mini-bar in feed rows (desktop) */
+.mos-bar { display: none; }
+
+/* Search results dropdown */
+.search-results { background: var(--sheet); border-radius: 12px; margin: 0 16px 8px;
+  overflow: hidden; }
+.search-results .row { padding: 10px 14px; }
+.search-hint { color: var(--gray); font-size: 12px; padding: 8px 14px; }
+
+/* ---------- Desktop ---------- */
+@media (min-width: 900px) {
+  .app { max-width: 1140px; padding: 0 24px 96px; }
+  .title-lg { font-size: 42px; margin-top: 28px; }
+  .row { padding: 14px 18px; border-radius: 12px; }
+  .row:hover { background: #ffffff0a; }
+  .row-ticker { font-size: 18px; }
+  .row-name { font-size: 14px; }
+  .price { font-size: 18px; }
+
+  /* richer feed row: show the MoS bar */
+  .mos-bar { display: block; width: 130px; }
+  .mos-bar .lab { display: flex; justify-content: space-between; color: var(--gray);
+    font-size: 11px; margin-bottom: 3px; }
+
+  /* cards in a 2-col masonry-ish grid inside asset sheet stays single col,
+     but the sheet itself becomes a centered dialog */
+  .sheet-backdrop { align-items: center; padding: 4vh 0; }
+  .sheet { max-width: 920px; border-radius: 20px; max-height: 92vh; }
+  .stats { grid-template-columns: repeat(6, 1fr); }
+  .stats .cell { border-right: 0.5px solid var(--sep); }
+  .stats .cell:nth-child(3n) { border-right: 0.5px solid var(--sep); }
+  .stats .cell:last-child { border-right: none; }
+  .card { padding: 20px; }
+  .tabbar { display: none; }
+  .topnav { display: flex !important; }
+}
+
+/* Desktop top navigation (replaces the mobile tab bar) */
+.topnav { display: none; gap: 8px; align-items: center; margin: 24px 16px 0; }
+.topnav .item { color: var(--gray2); font-size: 14px; font-weight: 600; padding: 8px 14px;
+  border-radius: 10px; cursor: pointer; }
+.topnav .item.sel { background: var(--elev); color: #fff; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { usd, pct, signedPct } from '../lib/format'
 import { T, verdictColor } from '../theme'
@@ -8,7 +8,18 @@ export default function Feed({ onOpen, onMacro }) {
   const [feed, setFeed] = useState(null)
   const [brief, setBrief] = useState(null)
   const [q, setQ] = useState('')
+  const [results, setResults] = useState(null)
   const [err, setErr] = useState(null)
+  const debounce = useRef(null)
+
+  const onQuery = (value) => {
+    setQ(value)
+    clearTimeout(debounce.current)
+    if (value.trim().length < 2) { setResults(null); return }
+    debounce.current = setTimeout(() => {
+      api.search(value.trim()).then((r) => setResults(r.results)).catch(() => setResults(null))
+    }, 300)
+  }
 
   useEffect(() => {
     let timer
@@ -37,9 +48,36 @@ export default function Feed({ onOpen, onMacro }) {
       <div className="subtitle">{today}</div>
 
       <div className="toolbar">
-        <input className="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" placeholder="Search any ticker or company (US, EU & EM via US listings)"
+          value={q} onChange={(e) => onQuery(e.target.value)} />
         <button className="pill-btn" title="Filters">···</button>
       </div>
+
+      {/* Global search results */}
+      {results && (
+        <div className="search-results">
+          {results.length === 0 && <div className="search-hint">No matches.</div>}
+          {results.map((r) => (
+            <div className="row hairline" key={r.ticker}
+              onClick={() => r.analyzable && onOpen(r.ticker)}
+              style={{ opacity: r.analyzable ? 1 : 0.55, cursor: r.analyzable ? 'pointer' : 'default' }}>
+              <div className="row-main">
+                <div className="row-ticker" style={{ fontSize: 15 }}>{r.ticker}
+                  {r.exchange ? <span className="tag" style={{ marginLeft: 8 }}>{r.exchange}</span> : null}
+                </div>
+                <div className="row-name">{r.name}</div>
+              </div>
+              {r.analyzable
+                ? <span className="tag blue">Analyze ›</span>
+                : <span className="tag">no SEC filings</span>}
+            </div>
+          ))}
+          <div className="search-hint">
+            Any company with SEC filings is analyzable on demand — including European and
+            emerging-market names via their US listings (ADRs).
+          </div>
+        </div>
+      )}
 
       {/* Macro & Cycle entry row */}
       <div className="row hairline" onClick={onMacro}>
@@ -77,13 +115,20 @@ export default function Feed({ onOpen, onMacro }) {
         return (
           <div className="row hairline" key={r.ticker} onClick={() => onOpen(r.ticker)}>
             <div className="row-main">
-              <div className="row-ticker">{r.ticker}</div>
+              <div className="row-ticker">{r.ticker}
+                <span className="tag" style={{ marginLeft: 8 }}>{r.sector.length > 26 ? r.sector.slice(0, 24) + '…' : r.sector}</span>
+              </div>
               <div className="row-name">{r.name}</div>
               <div className="row-verdict" style={{ color: verdictColor(r.verdict) }}>
-                {r.verdict} · {r.margin_of_safety >= 0 ? pct(r.margin_of_safety) + ' under fair value'
+                <span className={'tag ' + (r.verdict === 'BUY' ? 'green' : r.verdict === 'SELL' ? 'red' : 'amber')}>{r.verdict}</span>
+                {r.margin_of_safety >= 0 ? pct(r.margin_of_safety) + ' under fair value'
                   : pct(-r.margin_of_safety) + ' over fair value'}
                 {r.data_quality === 'low' && <span className="badge warn">data quality: low</span>}
               </div>
+            </div>
+            <div className="mos-bar">
+              <div className="lab"><span>Quality</span><span>{Math.round(r.quality)}</span></div>
+              <div className="bar"><div className="fill" style={{ width: Math.max(2, Math.min(100, r.quality)) + '%', background: r.quality >= 66 ? T.green : r.quality >= 33 ? T.amber : T.red }} /></div>
             </div>
             <Sparkline data={r.spark} prevClose={r.prev_close} />
             <div className="row-right">

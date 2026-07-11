@@ -20,4 +20,5 @@ export const api = {
   macro: () => get('/api/macro'),
   rateSensitivity: (bp = 50) => get(`/api/macro/rate-sensitivity?bp=${bp}`),
   formulas: () => get('/api/formulas'),
+  search: (q) => get(`/api/search?q=${encodeURIComponent(q)}`),
 }

@@ -60,6 +60,7 @@ export function signed(value, decimals = 2) {
 
 // Format an engine input value for the calculation sheet (unit-aware).
 export function formatInput(value, unit) {
+  if (value === null || value === undefined) return '—'
   if (Array.isArray(value)) return value.map((v) => formatInput(v, unit)).join(', ')
   if (typeof value === 'boolean') return value ? 'yes' : 'no'
   if (typeof value === 'string') return value
@@ -67,6 +68,8 @@ export function formatInput(value, unit) {
   switch (unit) {
     case 'decimal':
       return pct(value)
+    case '%':
+      return num(value, 1) + THIN + '%'
     case 'US$':
       return usdCompact(value)
     case 'US$/share':
@@ -75,7 +78,23 @@ export function formatInput(value, unit) {
       return num(value, 0)
     case 'pp':
       return num(value, 2) + THIN + 'pp'
+    case 'index':
+    case 'idx':
+      return num(value, 1)
     default:
-      return num(value, Math.abs(value) >= 1000 ? 0 : 4)
+      return num(value, Math.abs(value) >= 1000 ? 0 : Math.abs(value) >= 10 ? 2 : 4)
   }
+}
+
+// Generic value formatter for result/step values in calculation sheets.
+export function formatValue(v) {
+  if (v === null || v === undefined) return '—'
+  if (typeof v === 'boolean') return v ? 'yes' : 'no'
+  if (typeof v === 'number') {
+    if (Math.abs(v) >= 1e6) return usdCompact(v)
+    if (Math.abs(v) >= 1000) return num(v, 0)
+    if (Math.abs(v) > 0 && Math.abs(v) < 1) return num(v, 4)
+    return num(v, 2)
+  }
+  return String(v)
 }

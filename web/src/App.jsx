@@ -19,8 +19,16 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
+  const navItems = [['feed', 'Feed'], ['macro', 'Macro & Cycle'], ['learn', 'Learn']]
   return (
     <div className="app">
+      <nav className="topnav">
+        <span style={{ fontWeight: 800, fontSize: 16, marginRight: 12 }}>ValueScope</span>
+        {navItems.map(([id, label]) => (
+          <span key={id} className={'item ' + (tab === id ? 'sel' : '')}
+            onClick={() => setTab(id)}>{label}</span>
+        ))}
+      </nav>
       {tab === 'feed' && <Feed onOpen={setAsset} onMacro={() => setTab('macro')} />}
       {tab === 'macro' && <Macro formulas={formulas} />}
       {tab === 'learn' && <Learn />}

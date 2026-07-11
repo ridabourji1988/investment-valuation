@@ -12,11 +12,20 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
-# Liquid megacaps across sectors, each verified to have complete XBRL facts on
-# EDGAR and a Yahoo price. Banks are excluded (no operating-income line; an
-# FCFF model doesn't apply). Override with VALUESCOPE_UNIVERSE="AAPL,MSFT,...".
-DEFAULT_UNIVERSE = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META",
-                    "JNJ", "PG", "WMT", "KO", "HD", "CVX"]
+# Default scan universe: US megacaps + European and emerging-market leaders
+# via their US listings (ADRs file 20-F/40-F with the SEC, so the same XBRL
+# pipeline covers them; IFRS statements are converted to US$ at spot).
+# Banks are excluded (no operating-income line; an FCFF model doesn't apply).
+# Any other SEC filer is analyzable on demand through search.
+# Override with VALUESCOPE_UNIVERSE="AAPL,MSFT,...".
+DEFAULT_UNIVERSE = [
+    # US
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "JNJ", "PG", "WMT", "KO", "HD", "CVX",
+    # Europe (ADRs)
+    "SAP", "ASML", "SHEL", "NVO",
+    # Emerging markets / Asia (ADRs)
+    "TSM", "BABA", "VALE", "INFY",
+]
 
 
 class Config:

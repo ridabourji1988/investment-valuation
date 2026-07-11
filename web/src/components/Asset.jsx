@@ -8,7 +8,7 @@ import { valuePerShare } from '../lib/dcf'
 import { Disclaimer } from './Feed'
 
 // Trading-day counts to slice from the tail of the daily history series.
-const RANGES = { '1W': 5, '1M': 22, '3M': 66, '6M': 130, '1Y': 260, 'All': Infinity }
+const RANGES = { '1W': 5, '1M': 22, '3M': 66, '6M': 130, '1Y': Infinity }
 
 export default function Asset({ ticker, formulas, onClose }) {
   const [a, setA] = useState(null)
@@ -33,6 +33,14 @@ export default function Asset({ ticker, formulas, onClose }) {
         <div style={{ padding: '4px 16px 0' }}>
           <div style={{ fontSize: 26, fontWeight: 800 }}>{a.ticker}</div>
           <div className="muted" style={{ fontSize: 14 }}>{a.name} · {a.exchange}</div>
+          <div style={{ marginTop: 8 }}>
+            <span className="tag blue">{a.sector}</span>
+            <span className="tag">{(a.idea_category || '').replace('_', ' ')}</span>
+            <span className={'tag ' + (a.data_quality === 'high' ? 'green' : a.data_quality === 'medium' ? 'amber' : 'red')}>
+              data: {a.data_quality}
+            </span>
+            {a.sources?.fundamentals && <span className="tag">{a.sources.fundamentals.includes('20-F') || a.sources.fundamentals.includes('converted') ? 'IFRS filer' : 'SEC filer'}</span>}
+          </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
             <span style={{ fontSize: 30, fontWeight: 700 }} className="tnum">{usd(a.price)}</span>
             <span style={{ color: chg >= 0 ? T.green : T.red, fontWeight: 700 }}>
@@ -49,8 +57,7 @@ export default function Asset({ ticker, formulas, onClose }) {
         </div>
 
         {/* Price chart with blue dashed fair-value line */}
-        <PriceChart history={a.price_history.slice(-RANGES[range])} fairValue={a.fair_value}
-          rangeLabel={range} />
+        <PriceChart history={a.price_history.slice(-RANGES[range])} fairValue={a.fair_value} />
 
         {/* Stats grid */}
         <div className="card" style={{ padding: 0 }}>

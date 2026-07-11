@@ -99,6 +99,15 @@ def get_calc(ticker: str, metric: str) -> dict:
     return trace
 
 
+@app.get("/api/search")
+def search(q: str) -> dict:
+    """Global symbol search: SEC filers (incl. foreign ADRs) analyzable now."""
+    from ..data import provider
+    if not q or len(q.strip()) < 1:
+        return {"results": []}
+    return {"results": provider.search(q.strip())}
+
+
 @app.get("/api/macro")
 def get_macro() -> dict:
     return service.macro_dashboard()

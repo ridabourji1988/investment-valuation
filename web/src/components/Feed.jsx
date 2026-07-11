@@ -40,7 +40,12 @@ export default function Feed({ onOpen, onMacro }) {
   }, [])
 
   if (err) return <div className="loading">Could not load feed: {err}</div>
-  if (!feed) return <div className="loading">Scanning markets…</div>
+  if (!feed) return (
+    <div className="loading">
+      <span className="spinner" />
+      Starting the live scan — SEC filings, prices, macro. First results within a minute.
+    </div>
+  )
 
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const rows = feed.rows.filter((r) =>
@@ -94,12 +99,16 @@ export default function Feed({ onOpen, onMacro }) {
         <span className="muted">›</span>
       </div>
 
-      {/* Warming banner while the first live scan completes */}
+      {/* Warming banner with real progress while the first live scan runs */}
       {feed.warming && (
         <div className="row hairline" style={{ cursor: 'default' }}>
+          <span className="spinner" />
           <div className="row-main">
             <div className="row-name">
               Scanning SEC filings… {feed.count}/{feed.universe} companies ready
+            </div>
+            <div className="warmbar">
+              <div className="fill" style={{ width: Math.max(3, (100 * feed.count) / feed.universe) + '%' }} />
             </div>
           </div>
         </div>

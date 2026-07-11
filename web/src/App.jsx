@@ -29,9 +29,16 @@ export default function App() {
             onClick={() => setTab(id)}>{label}</span>
         ))}
       </nav>
-      {tab === 'feed' && <Feed onOpen={setAsset} onMacro={() => setTab('macro')} />}
-      {tab === 'macro' && <Macro formulas={formulas} />}
-      {tab === 'learn' && <Learn />}
+      {/* Tabs stay mounted — switching must not refetch or lose state. */}
+      <div style={{ display: tab === 'feed' ? undefined : 'none' }}>
+        <Feed onOpen={setAsset} onMacro={() => setTab('macro')} />
+      </div>
+      <div style={{ display: tab === 'macro' ? undefined : 'none' }}>
+        <Macro formulas={formulas} />
+      </div>
+      <div style={{ display: tab === 'learn' ? undefined : 'none' }}>
+        <Learn />
+      </div>
 
       {asset && <Asset ticker={asset} formulas={formulas} onClose={() => setAsset(null)} />}
 

@@ -9,6 +9,7 @@ and Simulations".
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -39,6 +40,11 @@ def simulate(base: DCFAssumptions, price: float, cfg: MCConfig | None = None) ->
     values = np.empty(n, dtype=float)
     valid = 0
     for i in range(n):
+        if i % 500 == 499:
+            # 10k pure-Python DCFs hold the GIL for seconds; without this
+            # yield the background warm starves every API request and the UI
+            # can't even show scan progress. Costs ~20ms per simulation.
+            time.sleep(0.001)
         a = copy.copy(base)
         a.growth_initial = float(growth_draws[i])
         a.target_margin = max(0.01, float(margin_draws[i]))

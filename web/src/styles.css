@@ -163,6 +163,14 @@ table.inputs .src { color: var(--gray); font-size: 12px; }
 .disclaimer { color: var(--gray); font-size: 12px; text-align: center; padding: 24px 24px 8px;
   line-height: 1.5; }
 .loading { color: var(--gray); text-align: center; padding: 60px 20px; }
+.spinner { display: inline-block; width: 14px; height: 14px; margin-right: 10px;
+  border: 2px solid var(--gray); border-top-color: transparent; border-radius: 50%;
+  animation: spin 0.9s linear infinite; vertical-align: -2px; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.warmbar { height: 3px; background: var(--sep); border-radius: 2px; margin-top: 8px;
+  overflow: hidden; max-width: 420px; }
+.warmbar .fill { height: 100%; background: var(--blue); border-radius: 2px;
+  transition: width 0.6s ease; }
 .muted { color: var(--gray); }
 a { color: var(--blue); text-decoration: none; }
 

@@ -3,16 +3,18 @@ so no single provider (Yahoo) can take the app down.
 
 Chains (first success wins, source label carried through):
   prices/history   Yahoo Finance (real-time)  -> Cboe delayed quotes (15 min)
+                   -> Alpha Vantage (optional key, last resort)
   regression beta  close series via the same chain, vs the S&P 500
   credit proxy     HYG vs IEF closes via the same chain
-  FX               Yahoo spot                 -> er-api daily -> ECB (frankfurter)
+  FX               Yahoo spot -> er-api daily -> ECB (frankfurter)
+                   -> Alpha Vantage (optional key, last resort)
 
 Nothing is ever synthesised: when every source in a chain fails, the call
 raises and the ticker is skipped and reported.
 """
 from __future__ import annotations
 
-from . import cboe, fx, yahoo
+from . import alphavantage, cboe, fx, yahoo
 
 
 def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
@@ -27,10 +29,18 @@ def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
                     "history": c["history"], "source": "Yahoo Finance"}
     except Exception:  # noqa: BLE001 — fall through to Cboe
         pass
-    q = cboe.quote(ticker)
-    hist = cboe.history(ticker, days=260)
+    try:
+        q = cboe.quote(ticker)
+        hist = cboe.history(ticker, days=260)
+        return {"price": q["price"], "currency": "USD", "history": hist,
+                "source": "Cboe delayed quotes (15 min)"}
+    except Exception:  # noqa: BLE001 — last resort, only with a key
+        if not alphavantage.available():
+            raise
+    q = alphavantage.quote(ticker)
+    hist = alphavantage.history(ticker, days=260)
     return {"price": q["price"], "currency": "USD", "history": hist,
-            "source": "Cboe delayed quotes (15 min)"}
+            "source": "Alpha Vantage (daily)"}
 
 
 def price_history(ticker: str) -> list[dict]:
@@ -97,4 +107,10 @@ def fx_to_usd(currency: str) -> float:
     try:
         return yahoo.fx_to_usd(ccy)
     except Exception:  # noqa: BLE001 — er-api / ECB carry it
+        pass
+    try:
         return fx.to_usd(ccy)
+    except Exception:  # noqa: BLE001 — last resort, only with a key
+        if not alphavantage.available():
+            raise
+    return alphavantage.fx_to_usd(ccy)

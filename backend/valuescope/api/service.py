@@ -23,6 +23,7 @@ _CACHE_LOCK = threading.Lock()
 _TICKER_LOCKS: dict = {}          # per-ticker compute locks
 _TICKER_LOCKS_GUARD = threading.Lock()
 _WARM = {"started": False, "attempted": set(), "failed": {}}
+_MACRO_KICK = {"running": False}
 
 
 def _stamp(obj: dict) -> dict:
@@ -121,8 +122,36 @@ def warm_cache() -> None:
     ensure_warming()
 
 
+_REFRESH = {"queue": set(), "running": False, "lock": threading.Lock()}
+
+
 def _refresh_async(ticker: str) -> None:
-    threading.Thread(target=_warm_one, args=(ticker, True), daemon=True).start()
+    """Queue a background refresh. Single-flight: one worker drains the queue
+    serially — 20 tickers going stale together must not spawn 20 concurrent
+    Monte Carlo recomputes and starve every API request (GIL)."""
+    with _REFRESH["lock"]:
+        _REFRESH["queue"].add(ticker)
+        if _REFRESH["running"]:
+            return
+        _REFRESH["running"] = True
+    threading.Thread(target=_drain_refresh, daemon=True).start()
+
+
+def _drain_refresh() -> None:
+    while True:
+        with _REFRESH["lock"]:
+            if not _REFRESH["queue"]:
+                _REFRESH["running"] = False
+                return
+            t = _REFRESH["queue"].pop()
+        _warm_one(t, force=True)
+        time.sleep(0.25)
+
+
+def _stale_after(ticker: str) -> float:
+    """Per-ticker TTL with deterministic jitter (up to +4 min) so entries
+    warmed together don't all expire together."""
+    return _TTL + (hash(ticker) % 240)
 
 
 def feed() -> dict:
@@ -139,7 +168,7 @@ def feed() -> dict:
         ready += 1
         with _CACHE_LOCK:
             age = now - _CACHE[f"analysis:{t}"]["_ts"]
-        if age > _TTL:
+        if age > _stale_after(t):
             _refresh_async(t)  # serve stale, refresh in background
         hist = a["price_history"]
         rows.append({
@@ -152,14 +181,15 @@ def feed() -> dict:
         })
     rows.sort(key=lambda r: r["margin_of_safety"], reverse=True)
 
+    # Macro must never block the feed: the first computation can spend many
+    # seconds in source timeouts, so serve whatever is cached (any age) and
+    # refresh in the background.
     regime_label, regime_impl, sources = "—", "Macro sources warming…", {}
-    try:
-        dash = macro_dashboard()
+    dash = _macro_cached_or_kick()
+    if dash:
         regime_label = dash["regime"]["result"]["label"]
         regime_impl = dash["regime"]["result"]["implication"]
         sources = dash.get("sources", {})
-    except Exception:
-        pass
 
     attempted_all = _WARM["attempted"] >= set(universe)
     return _stamp({
@@ -173,6 +203,27 @@ def feed() -> dict:
         "regime_implication": regime_impl,
         "sources": sources,
     })
+
+
+def _macro_cached_or_kick() -> dict | None:
+    """Cached macro dashboard at any age; when missing/stale, computes it in a
+    background thread (single-flight) instead of blocking the caller."""
+    with _CACHE_LOCK:
+        hit = _CACHE.get("macro-dash")
+    if hit and (time.time() - hit["_ts"] < _TTL):
+        return hit["data"]
+    if not _MACRO_KICK["running"]:
+        _MACRO_KICK["running"] = True
+
+        def run():
+            try:
+                macro_dashboard()
+            except Exception:  # noqa: BLE001 — sources down; retried next feed
+                pass
+            finally:
+                _MACRO_KICK["running"] = False
+        threading.Thread(target=run, daemon=True).start()
+    return hit["data"] if hit else None  # stale beats nothing
 
 
 def macro_dashboard() -> dict:
@@ -254,3 +305,7 @@ def reset_for_tests() -> None:
     _WARM["started"] = False
     _WARM["attempted"] = set()
     _WARM["failed"] = {}
+    _MACRO_KICK["running"] = False
+    with _REFRESH["lock"]:
+        _REFRESH["queue"] = set()
+        _REFRESH["running"] = False

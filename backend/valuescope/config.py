@@ -34,6 +34,9 @@ class Config:
     UNIVERSE: list = [t.strip().upper() for t in
                       os.getenv("VALUESCOPE_UNIVERSE", ",".join(DEFAULT_UNIVERSE)).split(",")
                       if t.strip()]
+    # Optional last-resort market-data key (free tier ~25 req/day). The
+    # keyless chain (Yahoo -> Cboe, er-api/ECB) carries everything without it.
+    ALPHAVANTAGE_API_KEY: str = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
     # AI (OpenRouter)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")

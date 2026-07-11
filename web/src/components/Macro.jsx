@@ -23,11 +23,11 @@ export default function Macro({ formulas }) {
     <div>
       <div className="title-lg">Macro &amp; Cycle</div>
       <div className="card">
-        <div className="eyebrow" style={{ color: T.amber }}>Macro sources unavailable</div>
+        <div className="eyebrow" style={{ color: T.amber }}>Macro sources warming</div>
         <div className="lead">
-          Live macro series (Treasury yields, unemployment, CPI) can&apos;t be fetched from
-          this network right now — usually a temporary rate limit. This page retries
-          automatically every 30 seconds; nothing is ever simulated.
+          Live macro series (Treasury yields, unemployment, CPI) are still being fetched —
+          the first pass can take a moment, and a temporary rate limit looks the same.
+          This page retries automatically every 30 seconds; nothing is ever simulated.
         </div>
         <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>{err}</div>
       </div>

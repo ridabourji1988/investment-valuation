@@ -11,8 +11,16 @@ export default function Feed({ onOpen, onMacro }) {
   const [err, setErr] = useState(null)
 
   useEffect(() => {
-    api.feed().then(setFeed).catch((e) => setErr(e.message))
-    api.brief().then(setBrief).catch(() => {})
+    let timer
+    const load = () => api.feed().then((f) => {
+      setFeed(f)
+      // First scan of the universe runs in the background at startup —
+      // poll until every ticker has been attempted.
+      if (f.warming) timer = setTimeout(load, 4000)
+      else api.brief().then(setBrief).catch(() => {})
+    }).catch((e) => setErr(e.message))
+    load()
+    return () => clearTimeout(timer)
   }, [])
 
   if (err) return <div className="loading">Could not load feed: {err}</div>
@@ -42,6 +50,26 @@ export default function Feed({ onOpen, onMacro }) {
         </div>
         <span className="muted">›</span>
       </div>
+
+      {/* Warming banner while the first live scan completes */}
+      {feed.warming && (
+        <div className="row hairline" style={{ cursor: 'default' }}>
+          <div className="row-main">
+            <div className="row-name">
+              Scanning SEC filings… {feed.count}/{feed.universe} companies ready
+            </div>
+          </div>
+        </div>
+      )}
+      {Object.keys(feed.failed || {}).length > 0 && !feed.warming && (
+        <div className="row hairline" style={{ cursor: 'default' }}>
+          <div className="row-main">
+            <div className="row-name">
+              Skipped (source unavailable): {Object.keys(feed.failed).join(', ')}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ranked rows */}
       {rows.map((r) => {

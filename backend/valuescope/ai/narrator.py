@@ -13,12 +13,12 @@ def _fmt_pct(x: float) -> str:
     return f"{x*100:.1f}%"
 
 
-def _generate(system: str, user: str, allowed: object, *, max_tokens: int = 800) -> dict:
+def _generate(system: str, user: str, allowed: object) -> dict:
     """Call the model, validate numbers, and report provenance/usage."""
     if not config.ai_ready():
         return {"text": None, "source": "unavailable", "usage": None, "guardrail": None}
     try:
-        res = openrouter.chat(system, user, max_tokens=max_tokens)
+        res = openrouter.chat(system, user)  # max_tokens from config (default 20000)
     except Exception as e:  # noqa: BLE001
         return {"text": None, "source": f"error: {e}", "usage": None, "guardrail": None}
     guard = validate_numbers(res["text"], allowed)
@@ -93,18 +93,15 @@ def narrate_asset(analysis: dict, *, want: tuple = ("business", "valuation", "me
             "operating_margin": round(_input(a, "intrinsic_value", "Operating margin₀"), 4),
         }
         g = _generate(prompts.SYSTEM_PROMPT,
-                      prompts.business_description(a["name"], a["sector"], facts), facts,
-                      max_tokens=300)
+                      prompts.business_description(a["name"], a["sector"], facts), facts)
         out["blocks"]["business"] = _finalize(
             g, lambda: f"{a['name']} ({a['ticker']}) operates in the {a['sector']} sector "
                        f"and is listed on {a['exchange']}.")
     if "valuation" in want:
-        g = _generate(prompts.SYSTEM_PROMPT, prompts.valuation_narrative(payload), payload,
-                      max_tokens=400)
+        g = _generate(prompts.SYSTEM_PROMPT, prompts.valuation_narrative(payload), payload)
         out["blocks"]["valuation"] = _finalize(g, lambda: _fallback_valuation(payload))
     if "memo" in want:
-        g = _generate(prompts.SYSTEM_PROMPT, prompts.verdict_memo(payload), payload,
-                      max_tokens=900)
+        g = _generate(prompts.SYSTEM_PROMPT, prompts.verdict_memo(payload), payload)
         out["blocks"]["memo"] = _finalize(g, lambda: _fallback_memo(payload))
     return out
 
@@ -116,7 +113,7 @@ def narrate_brief(scan: dict) -> dict:
         "top": [{"ticker": t["ticker"], "margin_of_safety": round(t["margin_of_safety"], 3)}
                 for t in scan.get("top", [])],
     }
-    g = _generate(prompts.SYSTEM_PROMPT, prompts.market_brief(payload), payload, max_tokens=250)
+    g = _generate(prompts.SYSTEM_PROMPT, prompts.market_brief(payload), payload)
     fallback = (f"Today's scan surfaced {payload['ideas']} ideas, {payload['buys']} rated Buy. "
                 f"The macro regime reads '{payload['regime']}'. "
                 + (f"Standouts include {payload['top'][0]['ticker']} at "

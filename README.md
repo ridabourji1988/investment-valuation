@@ -25,21 +25,22 @@ step-by-step arithmetic → the book the formula comes from).
 |-------|----------|
 | **Engine** (`backend/valuescope/engine`) | 10-year FCFF DCF (Damodaran *ginzu*), terminal value, reverse DCF (bisection), Monte Carlo (≥10k runs), CAPM, bottom-up beta (Hamada), WACC, margin of safety, NCAV net-nets, Magic Formula, Piotroski F-Score, Altman Z-Score, Beneish M-Score, quality composite, Sahm rule, regime classifier, rate-sensitivity, verdict rules + value-trap check. Every metric emits a **CalculationTrace**. |
 | **Registry** (`backend/valuescope/registry/formulas.yaml`) | Single source of truth: `formula_id → expression, variables, citation, implementation, tests`. |
-| **Data** (`backend/valuescope/data`) | Live SEC EDGAR / Yahoo / FRED clients + a bundled demo universe so the app runs fully offline. |
+| **Data** (`backend/valuescope/data`) | **100% live, keyless, autonomous.** SEC EDGAR XBRL fundamentals (multi-tag candidates, tag-migration detection, derived-EBIT fallbacks), Yahoo prices + 2Y regression beta vs the S&P 500, macro from FRED with automatic keyless fallbacks (Yahoo Treasury tickers, BLS public API, HYG−IEF credit proxy) behind a circuit breaker. Zero synthetic data: a company whose filings lack required tags is skipped and reported. |
 | **AI** (`backend/valuescope/ai`) | OpenRouter client (**GLM 5.2 via StreamLake**, implicit prompt caching for the discount) + number-validator guardrail + deterministic fallback. |
 | **API** (`backend/valuescope/api`) | FastAPI: `/api/feed`, `/api/asset/{t}`, `/api/asset/{t}/calc/{metric}`, `/api/macro`, `/api/macro/rate-sensitivity`, `/api/formulas`, `/api/brief`, `/api/health`. |
 | **Web** (`web/`) | React + Vite + Recharts. Opportunity Feed, Asset 360 (with live-slider DCF, Reverse DCF, Monte Carlo tabs), Show Calculation sheets with recursive drill-down, Macro & Cycle dashboard, Learn/Methodology generated from the registry. |
 
 ## Tested math
 
-The acceptance bar is correctness of the financial calculations. **54 tests pass**,
-each reproducing a textbook/Damodaran worked example within tolerance:
+The acceptance bar is correctness of the financial calculations. **66 tests pass**,
+each reproducing a textbook/Damodaran worked example within tolerance (API tests run
+offline against fixtures; the live pipeline is verified separately):
 
 ```bash
 cd backend
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest            # 54 passed
+pytest            # 66 passed
 ```
 
 Highlights: the DCF collapses to a closed-form perpetuity `NOPAT/WACC` under zero
@@ -71,19 +72,19 @@ docker run -p 8000:8000 --env-file .env valuescope
 
 1. Push this repo to GitHub and create a Railway project from it. Railway detects the
    **`Dockerfile`** (config in `railway.json`, health check at `/api/health`).
-2. In **Project → Variables**, set (see `.env.example`):
+2. In **Project → Variables**, set **one variable**:
    - `OPENROUTER_API_KEY` — your OpenRouter key (comma-separate multiple keys).
-   - `OPENROUTER_MODEL=z-ai/glm-5.2` (the default; verified live).
-   - `OPENROUTER_PROVIDER=streamlake` (the default routing slug) — StreamLake is
-     requested first for the caching discount.
-   - `VALUESCOPE_LIVE_DATA=true` and `VALUESCOPE_SEC_UA="…your email…"` to enable live
-     prices/macro (otherwise the demo dataset is served).
+   Everything else has autonomous defaults (`z-ai/glm-5.2` via `streamlake`,
+   temperature 0, 12-ticker universe, keyless data pipeline) — see `.env.example`
+   for optional overrides.
 3. Deploy. Railway injects `PORT`; the server binds `0.0.0.0:$PORT` automatically.
    The single service serves both the API and the React app.
 
-The app is fully functional with **no keys and no network** (demo dataset + deterministic
-narratives); adding the OpenRouter key switches on GLM-written narratives, and
-`VALUESCOPE_LIVE_DATA=true` switches on live prices and macro.
+At startup the server scans the whole universe in the background (SEC filings, prices,
+macro). The feed serves each company as it becomes ready and shows a progress banner
+until the first pass completes (~30s). After that: fundamentals refresh every 12h,
+prices every 15min, macro hourly — no admin action, ever. Without an OpenRouter key
+the app still runs fully, with deterministic narrative text.
 
 ## Prompt caching
 

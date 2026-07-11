@@ -30,9 +30,17 @@ def _api_keys() -> list[str]:
     return [k.strip() for k in raw.split(",") if k.strip()]
 
 
-def build_payload(system_prompt: str, user_prompt: str, *, temperature: float = 0.3,
-                  max_tokens: int = 800) -> dict:
-    """Construct the request body with a cached system prefix and provider routing."""
+def build_payload(system_prompt: str, user_prompt: str, *, temperature: float | None = None,
+                  max_tokens: int | None = None) -> dict:
+    """Construct the request body with a cached system prefix and provider routing.
+
+    temperature defaults to 0 (greedy decoding): the narrator must restate
+    engine numbers verbatim, so sampling randomness only adds hallucination
+    risk. The number-validator guardrail remains the hard backstop."""
+    if max_tokens is None:
+        max_tokens = config.OPENROUTER_MAX_TOKENS
+    if temperature is None:
+        temperature = config.OPENROUTER_TEMPERATURE
     return {
         "model": config.OPENROUTER_MODEL,
         # Prefer StreamLake for the GLM caching discount; allow fallbacks so a
@@ -51,8 +59,8 @@ def build_payload(system_prompt: str, user_prompt: str, *, temperature: float = 
     }
 
 
-def chat(system_prompt: str, user_prompt: str, *, temperature: float = 0.3,
-         max_tokens: int = 800, timeout: float = 45.0) -> dict:
+def chat(system_prompt: str, user_prompt: str, *, temperature: float | None = None,
+         max_tokens: int | None = None, timeout: float = 60.0) -> dict:
     """Call OpenRouter. Returns {text, usage, model, provider}. Raises on failure."""
     keys = _api_keys()
     if not keys:

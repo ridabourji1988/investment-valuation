@@ -11,6 +11,13 @@ def test_guardrail_accepts_numbers_from_payload_strings():
     assert r["ok"], r
 
 
+def test_guardrail_accepts_magnitude_restatements():
+    # 281,700,000,000 narrated as "281.7 billion" must validate.
+    payload = {"revenue_ttm_usd": 281_700_000_000}
+    r = validate_numbers("The company makes about $281.7 billion in revenue.", payload)
+    assert r["ok"], r
+
+
 def test_guardrail_rejects_invented_numbers():
     payload = {"price": 88.0, "fair_value": 186.2}
     r = validate_numbers("The stock will hit 204.82 US$ soon.", payload)

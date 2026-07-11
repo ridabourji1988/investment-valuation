@@ -182,11 +182,11 @@ sahm_rule:
 
 regime_classifier:
   name: Macro regime classifier (rule table)
-  expression: "label from T10Y3M sign, ISM PMI vs 50, HY OAS level, Sahm trigger"
+  expression: "label from T10Y3M sign, industrial production YoY vs 0, HY OAS level (or HYG-IEF proxy), Sahm trigger"
   variables:
-    t10y3m: 10Y minus 3M Treasury spread (FRED T10Y3M)
-    pmi: ISM manufacturing PMI
-    hy_oas: High-yield option-adjusted spread (FRED BAMLH0A0HYM2)
+    t10y3m: 10Y minus 3M Treasury spread (FRED T10Y3M, or Yahoo ^TNX-^IRX)
+    ip_yoy: Industrial production YoY, manufacturing (FRED IPMAN)
+    hy_oas: High-yield option-adjusted spread (FRED BAMLH0A0HYM2; fallback HYG-IEF 3-month relative return)
     sahm_triggered: Sahm rule fired
   source_citation: "Marks, Mastering the Market Cycle; NBER business-cycle documentation (framework); ValueScope house rule v1 for thresholds"
   implementation_ref: "valuescope.engine.macro:classify_regime"

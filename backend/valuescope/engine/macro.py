@@ -57,24 +57,31 @@ def sahm_rule(unemployment_monthly: list) -> CalculationTrace:
 
 @dataclass
 class RegimeInputs:
-    t10y3m: float       # 10Y minus 3M spread (decimal, e.g. -0.005 = -50bp)
-    pmi: float          # ISM manufacturing PMI
-    hy_oas: float       # high-yield OAS (decimal, e.g. 0.045 = 4.5%)
+    t10y3m: float | None            # 10Y minus 3M spread (decimal, e.g. -0.005 = -50bp)
+    ip_yoy: float | None            # industrial production YoY (FRED IPMAN); manufacturing cycle
+    hy_oas: float | None            # high-yield OAS (decimal); None when FRED unreachable
     sahm_triggered: bool
+    credit_proxy_stress: bool | None = None  # HYG-vs-IEF fallback when hy_oas is None
 
 
 def classify_regime(x: RegimeInputs) -> CalculationTrace:
-    """Rule-table regime label over the four macro signals."""
-    inverted = x.t10y3m < 0
-    pmi_contraction = x.pmi < 50
-    credit_stress = x.hy_oas > 0.06
+    """Rule-table regime label over the four macro signals.
 
-    stress_count = sum([inverted, pmi_contraction, credit_stress, x.sahm_triggered])
+    Signals with no reachable source count as calm (never guessed) and are
+    listed as unavailable in the trace."""
+    inverted = x.t10y3m is not None and x.t10y3m < 0
+    ip_contraction = x.ip_yoy is not None and x.ip_yoy < 0
+    if x.hy_oas is not None:
+        credit_stress = x.hy_oas > 0.06
+    else:
+        credit_stress = bool(x.credit_proxy_stress)
+
+    stress_count = sum([inverted, ip_contraction, credit_stress, x.sahm_triggered])
     if x.sahm_triggered or stress_count >= 3:
         label = "Contraction / Late-cycle stress"
     elif stress_count == 2:
         label = "Slowdown"
-    elif inverted or pmi_contraction or credit_stress:
+    elif inverted or ip_contraction or credit_stress:
         label = "Late cycle"
     else:
         label = "Expansion"
@@ -92,20 +99,21 @@ def classify_regime(x: RegimeInputs) -> CalculationTrace:
         formula_id="regime_classifier",
         formula_version=spec.version,
         result={"label": label, "implication": implications, "stress_count": stress_count,
-                "signals": {"yield_curve_inverted": inverted, "pmi_contraction": pmi_contraction,
+                "signals": {"yield_curve_inverted": inverted, "ip_contraction": ip_contraction,
                             "credit_stress": credit_stress, "sahm_triggered": x.sahm_triggered}},
         unit="label",
         plain="Where we are in the market cycle, from four transparent signals.",
         inputs=[
             inp("10Y − 3M", x.t10y3m, "decimal", "fred", "T10Y3M"),
-            inp("ISM PMI", x.pmi, "index", "ism", "manufacturing PMI"),
-            inp("HY OAS", x.hy_oas, "decimal", "fred", "BAMLH0A0HYM2"),
+            inp("Industrial production YoY", x.ip_yoy, "decimal", "fred", "IPMAN"),
+            inp("HY OAS", x.hy_oas, "decimal", "fred",
+                "BAMLH0A0HYM2" if x.hy_oas is not None else "unavailable — HYG−IEF proxy used"),
             inp("Sahm triggered", x.sahm_triggered, "bool", "formula", "sahm_rule"),
         ],
         steps=[
             step("Yield curve inverted", "10Y−3M < 0", inverted),
-            step("PMI contraction", "PMI < 50", pmi_contraction),
-            step("Credit stress", "HY OAS > 6%", credit_stress),
+            step("Manufacturing contraction", "industrial production YoY < 0", ip_contraction),
+            step("Credit stress", "HY OAS > 6% (or ETF proxy)", credit_stress),
             step("Stress count", "sum of triggered signals", stress_count),
             step("Regime", "rule table", label),
         ],

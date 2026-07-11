@@ -58,11 +58,17 @@ def collect_numbers(obj) -> set[float]:
                     nums.add(round(m, 6))
 
     walk(obj)
-    # Also add common derived representations (percent<->decimal) for tolerance.
+    # Also add common restatements: percent<->decimal, and millions/billions/
+    # trillions for large figures ("416,161,000,000" is naturally narrated
+    # as "416.2 billion" or "$416.2B").
     expanded = set(nums)
     for n in nums:
         expanded.add(round(n * 100.0, 6))
         expanded.add(round(n / 100.0, 6))
+        if abs(n) >= 1e6:
+            expanded.add(round(n / 1e6, 6))
+            expanded.add(round(n / 1e9, 6))
+            expanded.add(round(n / 1e12, 6))
     return expanded
 
 

@@ -60,10 +60,12 @@ export default function Learn() {
       <div className="card">
         <div className="eyebrow">Transparency</div>
         <div className="lead">
-          Data sources: SEC EDGAR (filings), Yahoo Finance (prices), FRED (macro), Damodaran NYU
-          datasets (betas, ERP, margins). Update cadence: on-demand per ticker; macro refreshed on
-          rate moves. Limitations: valuations are estimates dependent on assumptions; demo data is
-          illustrative until live sources are enabled. Open source, MIT/AGPL.
+          All data is live and keyless: SEC EDGAR XBRL filings (fundamentals), Yahoo Finance
+          (prices, regression beta vs the S&amp;P 500, Treasury yields), FRED with automatic
+          keyless fallbacks (BLS labour data, HYG−IEF credit proxy) for macro. Companies whose
+          filings lack required tags are skipped and reported — numbers are never synthesised.
+          Fundamentals refresh every 12h, prices every 15min, macro hourly. Valuations remain
+          estimates dependent on documented assumptions. Open source, MIT/AGPL.
         </div>
       </div>
       <Disclaimer />

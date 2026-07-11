@@ -38,13 +38,15 @@ _WEB_DIST = os.path.abspath(_WEB_DIST)
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
 def health() -> dict:
+    s = service.status()
     return {
         "status": "ok",
         "engine_version": ENGINE_VERSION,
         "ai_ready": config.ai_ready(),
-        "live_data": config.LIVE_DATA,
         "model": config.OPENROUTER_MODEL,
         "provider": config.OPENROUTER_PROVIDER,
+        "data": {"universe": s["universe"], "ready": s["ready"],
+                 "warming": s["warming"], "failed": s["failed"]},
     }
 
 
@@ -55,39 +57,41 @@ def get_feed() -> dict:
 
 @app.get("/api/brief")
 def get_brief() -> dict:
-    results = service.scan_universe()
+    f = service.feed()
     scan = {
-        "count": len(results),
-        "buys": sum(1 for r in results if r["verdict"]["action"] == "BUY"),
-        "regime": service.macro_dashboard()["regime"]["result"]["label"],
-        "top": results[:2],
+        "count": f["count"],
+        "buys": f["buys"],
+        "regime": f["regime"],
+        "top": [{"ticker": r["ticker"], "margin_of_safety": r["margin_of_safety"]}
+                for r in f["rows"][:2]],
     }
     return narrator.narrate_brief(scan)
 
 
-@app.get("/api/asset/{ticker}")
-def get_asset(ticker: str) -> dict:
+def _analysis_or_http_error(ticker: str) -> dict:
+    """404 for unknown tickers, 502 when a live source is down — never a fake."""
     try:
         return service.analyze_ticker(ticker)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:  # noqa: BLE001 — live-source failure
+        raise HTTPException(status_code=502,
+                            detail=f"live data unavailable for {ticker.upper()}: {e}")
+
+
+@app.get("/api/asset/{ticker}")
+def get_asset(ticker: str) -> dict:
+    return _analysis_or_http_error(ticker)
 
 
 @app.get("/api/asset/{ticker}/narrative")
 def get_asset_narrative(ticker: str) -> dict:
-    try:
-        analysis = service.analyze_ticker(ticker)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return narrator.narrate_asset(analysis)
+    return narrator.narrate_asset(_analysis_or_http_error(ticker))
 
 
 @app.get("/api/asset/{ticker}/calc/{metric}")
 def get_calc(ticker: str, metric: str) -> dict:
-    try:
-        analysis = service.analyze_ticker(ticker)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    analysis = _analysis_or_http_error(ticker)
     trace = analysis["traces"].get(metric)
     if trace is None:
         raise HTTPException(status_code=404,

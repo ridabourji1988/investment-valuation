@@ -1,12 +1,46 @@
 """Narrator — turns engine output into AI explanations, with guardrails and a
 deterministic fallback so the app always renders something truthful.
+
+Blocks are cached content-addressed: decoding is greedy (temperature 0), so a
+block is fully determined by (model, prompt kind, facts). Reopening an asset
+whose numbers haven't changed serves the cached text instantly — no repeated
+AI calls; when the engine numbers change, the digest changes and the block
+regenerates so the story always matches the sheet.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 from ..config import config
+from ..data.cache import get_cached
 from . import prompts
 from .guardrails import validate_numbers
 from . import openrouter
+
+_AI_TTL = 7 * 24 * 3600  # the digest, not the clock, is what invalidates
+
+
+def _cached_block(kind: str, facts: object, generate, fallback_fn) -> dict:
+    """Serve the block from cache when (model, kind, facts) is unchanged.
+    Deterministic fallbacks (AI off, guardrail trip, provider error) are never
+    cached, so AI recovery is picked up on the next view."""
+    digest = hashlib.sha256(
+        json.dumps([config.OPENROUTER_MODEL, kind, facts],
+                   sort_keys=True, default=str).encode()).hexdigest()[:20]
+    holder: dict = {}
+
+    def build():
+        block = _finalize(generate(), fallback_fn)
+        if not block.get("ai"):
+            holder["fallback"] = block
+            raise RuntimeError("fallback — not cached")
+        return block
+
+    try:
+        return get_cached(f"ai:block:{digest}", _AI_TTL, build)
+    except Exception:  # noqa: BLE001 — serve the uncached fallback
+        return holder.get("fallback") or _finalize({"text": None}, fallback_fn)
 
 
 def _fmt_pct(x: float) -> str:
@@ -92,17 +126,24 @@ def narrate_asset(analysis: dict, *, want: tuple = ("business", "valuation", "me
             "revenue_ttm_usd": round(_input(a, "intrinsic_value", "Revenue₀"), 0),
             "operating_margin": round(_input(a, "intrinsic_value", "Operating margin₀"), 4),
         }
-        g = _generate(prompts.SYSTEM_PROMPT,
-                      prompts.business_description(a["name"], a["sector"], facts), facts)
-        out["blocks"]["business"] = _finalize(
-            g, lambda: f"{a['name']} ({a['ticker']}) operates in the {a['sector']} sector "
-                       f"and is listed on {a['exchange']}.")
+        out["blocks"]["business"] = _cached_block(
+            "business", facts,
+            lambda: _generate(prompts.SYSTEM_PROMPT,
+                              prompts.business_description(a["name"], a["sector"], facts),
+                              facts),
+            lambda: f"{a['name']} ({a['ticker']}) operates in the {a['sector']} sector "
+                    f"and is listed on {a['exchange']}.")
     if "valuation" in want:
-        g = _generate(prompts.SYSTEM_PROMPT, prompts.valuation_narrative(payload), payload)
-        out["blocks"]["valuation"] = _finalize(g, lambda: _fallback_valuation(payload))
+        out["blocks"]["valuation"] = _cached_block(
+            "valuation", payload,
+            lambda: _generate(prompts.SYSTEM_PROMPT,
+                              prompts.valuation_narrative(payload), payload),
+            lambda: _fallback_valuation(payload))
     if "memo" in want:
-        g = _generate(prompts.SYSTEM_PROMPT, prompts.verdict_memo(payload), payload)
-        out["blocks"]["memo"] = _finalize(g, lambda: _fallback_memo(payload))
+        out["blocks"]["memo"] = _cached_block(
+            "memo", payload,
+            lambda: _generate(prompts.SYSTEM_PROMPT, prompts.verdict_memo(payload), payload),
+            lambda: _fallback_memo(payload))
     return out
 
 
@@ -113,13 +154,17 @@ def narrate_brief(scan: dict) -> dict:
         "top": [{"ticker": t["ticker"], "margin_of_safety": round(t["margin_of_safety"], 3)}
                 for t in scan.get("top", [])],
     }
-    g = _generate(prompts.SYSTEM_PROMPT, prompts.market_brief(payload), payload)
-    fallback = (f"Today's scan surfaced {payload['ideas']} ideas, {payload['buys']} rated Buy. "
+    def fallback():
+        return (f"Today's scan surfaced {payload['ideas']} ideas, {payload['buys']} rated Buy. "
                 f"The macro regime reads '{payload['regime']}'. "
                 + (f"Standouts include {payload['top'][0]['ticker']} at "
                    f"{_fmt_pct(payload['top'][0]['margin_of_safety'])} margin of safety."
                    if payload["top"] else ""))
-    return {"payload": payload, "block": _finalize(g, lambda: fallback)}
+    block = _cached_block(
+        "brief", payload,
+        lambda: _generate(prompts.SYSTEM_PROMPT, prompts.market_brief(payload), payload),
+        fallback)
+    return {"payload": payload, "block": block}
 
 
 def _finalize(gen: dict, fallback_fn) -> dict:

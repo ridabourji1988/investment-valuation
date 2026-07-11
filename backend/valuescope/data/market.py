@@ -34,13 +34,18 @@ def price_and_history(ticker: str, *, rng: str = "1y") -> dict:
         hist = cboe.history(ticker, days=260)
         return {"price": q["price"], "currency": "USD", "history": hist,
                 "source": "Cboe delayed quotes (15 min)"}
-    except Exception:  # noqa: BLE001 — last resort, only with a key
+    except Exception as e_cboe:  # noqa: BLE001 — last resort, only with a key
         if not alphavantage.available():
             raise
-    q = alphavantage.quote(ticker)
-    hist = alphavantage.history(ticker, days=260)
-    return {"price": q["price"], "currency": "USD", "history": hist,
-            "source": "Alpha Vantage (daily)"}
+        try:
+            q = alphavantage.quote(ticker)
+            hist = alphavantage.history(ticker, days=260)
+            return {"price": q["price"], "currency": "USD", "history": hist,
+                    "source": "Alpha Vantage (daily)"}
+        except Exception as e_av:
+            raise RuntimeError(
+                f"no price source available for {ticker} "
+                f"(Cboe: {e_cboe}; Alpha Vantage: {e_av})") from e_av
 
 
 def price_history(ticker: str) -> list[dict]:

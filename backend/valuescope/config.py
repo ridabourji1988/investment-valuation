@@ -17,14 +17,33 @@ def _bool(name: str, default: bool = False) -> bool:
 # pipeline covers them; IFRS statements are converted to US$ at spot).
 # Banks are excluded (no operating-income line; an FCFF model doesn't apply).
 # Any other SEC filer is analyzable on demand through search.
-# Override with VALUESCOPE_UNIVERSE="AAPL,MSFT,...".
+# Curated default scan universe (~90 names). Every entry is an SEC filer with
+# usable XBRL and a US$ listing. Banks/insurers are deliberately excluded: an
+# FCFF DCF misvalues financials (debt is their raw material — Damodaran); they
+# need a dedicated equity model before they can be shown honestly.
+# Override with VALUESCOPE_UNIVERSE=comma,separated,tickers.
 DEFAULT_UNIVERSE = [
-    # US
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "JNJ", "PG", "WMT", "KO", "HD", "CVX",
-    # Europe (ADRs)
-    "SAP", "ASML", "SHEL", "NVO",
-    # Emerging markets / Asia (ADRs)
-    "TSM", "BABA", "VALE", "INFY",
+    # US — technology & communication
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "ORCL",
+    "CRM", "ADBE", "AMD", "INTC", "QCOM", "TXN", "CSCO", "IBM", "NOW",
+    "INTU", "NFLX", "DIS", "UBER", "BKNG", "PYPL",
+    # US — health care
+    "JNJ", "LLY", "ABBV", "MRK", "PFE", "TMO", "ABT", "AMGN", "GILD", "BMY",
+    # US — consumer & staples
+    "PG", "KO", "PEP", "COST", "WMT", "HD", "MCD", "NKE", "SBUX", "LOW",
+    "TGT", "PM", "MO", "CL",
+    # US — industrials, energy, materials, utilities
+    "CAT", "DE", "HON", "GE", "UNP", "UPS", "LMT", "RTX", "CVX", "COP",
+    "SLB", "LIN", "FCX", "NEM", "NEE",
+    # Europe (ADRs, 20-F filers)
+    "SAP", "ASML", "SHEL", "NVO", "AZN", "NVS", "GSK", "SNY", "TTE", "BP",
+    "RIO", "DEO", "BTI", "ERIC", "NOK", "UL",
+    # Asia (ADRs / 20-F). Toyota (TM) is excluded like the banks: its captive
+    # finance arm carries so much debt that an FCFF DCF misvalues the equity.
+    "TSM", "BABA", "INFY", "SONY", "SE", "BIDU", "JD", "PDD", "NTES",
+    "TCOM",
+    # Latin America / Australia
+    "VALE", "PBR", "MELI", "BHP",
 ]
 
 

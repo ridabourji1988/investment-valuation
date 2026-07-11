@@ -9,6 +9,7 @@ already the app's price-refresh cadence.
 """
 from __future__ import annotations
 
+import threading
 import time as _time
 
 from .cache import get_cached, http_get
@@ -25,7 +26,15 @@ _TTL_HISTORY = 30 * 60
 _SYMBOL_MAP = {"^GSPC": "_SPX", "^SPX": "_SPX"}
 
 _BREAKER = {"down_until": 0.0, "strikes": 0}
-_BREAKER_WINDOW = 300.0
+_BREAKER_WINDOW = 120.0
+
+# The CDN throttles sustained bursts (observed live ~45 tickers into a warm
+# scan even at 0.4s spacing), so pacing is ADAPTIVE: every request keeps a
+# floor interval that doubles when Cboe pushes back and relaxes after a
+# streak of successes. A scan is a marathon, not a sprint.
+_PACE = {"lock": threading.Lock(), "last": 0.0, "interval": 0.75, "streak": 0}
+_INTERVAL_MIN = 0.75
+_INTERVAL_MAX = 6.0
 
 
 class CboeUnavailable(RuntimeError):
@@ -35,15 +44,28 @@ class CboeUnavailable(RuntimeError):
 def _guarded_get(url: str, **kw):
     if _time.time() < _BREAKER["down_until"]:
         raise CboeUnavailable("Cboe circuit breaker open")
+    with _PACE["lock"]:
+        wait = _PACE["last"] + _PACE["interval"] - _time.time()
+        if wait > 0:
+            _time.sleep(wait)
+        _PACE["last"] = _time.time()
     try:
         r = http_get(url, **kw)
     except Exception:
+        with _PACE["lock"]:
+            _PACE["interval"] = min(_PACE["interval"] * 2, _INTERVAL_MAX)
+            _PACE["streak"] = 0
         _BREAKER["strikes"] += 1
         if _BREAKER["strikes"] >= 3:
             _BREAKER["down_until"] = _time.time() + _BREAKER_WINDOW
             _BREAKER["strikes"] = 0
         raise
     _BREAKER["strikes"] = 0
+    with _PACE["lock"]:
+        _PACE["streak"] += 1
+        if _PACE["streak"] >= 25:  # sustained success -> relax toward the floor
+            _PACE["interval"] = max(_PACE["interval"] / 2, _INTERVAL_MIN)
+            _PACE["streak"] = 0
     return r
 
 

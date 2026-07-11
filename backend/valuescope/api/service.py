@@ -90,7 +90,7 @@ def _warm_one(ticker: str, force: bool = False) -> None:
 def _warm_all() -> None:
     for t in provider.list_tickers():
         _warm_one(t)
-        time.sleep(0.5)  # courtesy pacing for EDGAR and Yahoo
+        time.sleep(1.0)  # courtesy pacing — burst scans trip source throttles
 
 
 def _watchdog_loop() -> None:

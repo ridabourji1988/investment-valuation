@@ -198,6 +198,53 @@ def shares_outstanding(facts: dict) -> float | None:
         s = annual_series(facts, [concept], unit="shares", flow=flow, n=1)
         if s and s[-1][1] > 0:
             return s[-1][1]
+    return _shares_from_eps(facts)
+
+
+_PER_SHARE_PAIRS = [
+    # (total tag candidates, matching per-share tag candidates)
+    (("ProfitLossAttributableToOwnersOfParent", "NetIncomeLoss", "ProfitLoss"),
+     ("EarningsPerShareBasic", "BasicEarningsLossPerShare")),
+    (("DividendsPaidOrdinaryShares",),
+     ("DividendsPaidOrdinarySharesPerShare",)),
+]
+
+
+def _shares_from_eps(facts: dict) -> float | None:
+    """Filed-value identity for filers that tag no share count at all (BP):
+    shares = a filed annual total divided by its filed per-share figure
+    (profit/EPS, or dividends/DPS), matched on fiscal year and currency.
+    Per-share rounding puts this within ~1% of the true count."""
+    for ns in ("us-gaap", "ifrs-full"):
+        f = facts["facts"].get(ns, {})
+        for total_tags, per_share_tags in _PER_SHARE_PAIRS:
+            total = next((f[t] for t in total_tags if t in f), None)
+            per_share = next((f[t] for t in per_share_tags if t in f), None)
+            if not (total and per_share):
+                continue
+            for ccy, total_items in total.get("units", {}).items():
+                ps_items = per_share.get("units", {}).get(f"{ccy}/shares", [])
+                # Quarterly and annual rows share end dates (and even fp=FY),
+                # so periods must match on (start, end) exactly; prefer the
+                # longest span (full year), then recency.
+                total_by_period = {(x.get("start"), x["end"]): x["val"]
+                                   for x in total_items
+                                   if str(x.get("form", "")).startswith(_ANNUAL_FORMS)
+                                   and x.get("val")}
+                matches = []
+                for x in ps_items:
+                    period, ps = (x.get("start"), x.get("end")), x.get("val")
+                    if (str(x.get("form", "")).startswith(_ANNUAL_FORMS) and ps
+                            and period in total_by_period):
+                        matches.append((period[1] or "", period[0] or "",
+                                        abs(total_by_period[period] / ps)))
+                if matches:
+                    latest_end = max(m[0] for m in matches)
+                    # among the latest fiscal end, the earliest start = the
+                    # full-year figure rather than a final quarter
+                    _, _, shares = min(m for m in matches if m[0] == latest_end)
+                    if shares > 0:
+                        return float(shares)
     return None
 
 

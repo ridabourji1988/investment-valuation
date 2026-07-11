@@ -75,13 +75,16 @@ docker run -p 8000:8000 --env-file .env valuescope
 2. In **Project → Variables**, set **one variable**:
    - `OPENROUTER_API_KEY` — your OpenRouter key (comma-separate multiple keys).
    Everything else has autonomous defaults (`z-ai/glm-5.2` via `streamlake`,
-   temperature 0, 20-ticker global universe, keyless data pipeline) — see
+   temperature 0, ~95-ticker global universe, keyless data pipeline) — see
    `.env.example` for optional overrides.
 3. Deploy. Railway injects `PORT`; the server binds `0.0.0.0:$PORT` automatically.
    The single service serves both the API and the React app.
 
 At startup the server scans the whole universe in the background (SEC filings, prices,
-macro). The default universe covers the US, Europe and emerging markets (20 names);
+macro). The default universe covers the US, Europe and emerging markets (~95 names
+across tech, health care, consumer, industrials, energy and materials — banks and
+insurers are excluded until a dedicated financial-sector model exists, because an
+FCFF DCF misvalues them);
 **any other SEC filer — including foreign ADRs — is analyzable on demand through the
 search bar**. The feed serves each company as it becomes ready and shows a progress
 banner until the first pass completes (~1min). After that: fundamentals refresh every

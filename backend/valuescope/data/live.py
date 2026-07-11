@@ -38,19 +38,29 @@ ERP = 0.045
 # (Damodaran, fcffsimpleginzu: stable cost of capital ≈ Rf + 4.5%).
 MATURE_WACC_PREMIUM = 0.045
 
-# Ordinary shares per depositary receipt for well-known US-listed foreign
-# issuers (public reference facts, used when Yahoo's listing share count is
-# unavailable). EDGAR reports ORDINARY shares; the listing price is per ADS.
+# Ordinary shares per ADS for well-known US-listed foreign issuers (public
+# reference facts). EDGAR reports ORDINARY shares; the listing price is per
+# ADS. Used when Yahoo's listing count is unavailable; the implied-P/E
+# selector in _listing_shares corrects entries whose EDGAR share tag is
+# already ADS-equivalent.
 KNOWN_ADR_RATIOS = {
     "TSM": 5.0, "SHEL": 2.0, "BABA": 8.0, "SAP": 1.0, "NVO": 1.0,
     "INFY": 1.0, "VALE": 1.0, "ASML": 1.0, "SONY": 1.0, "UL": 1.0,
+    "AZN": 0.5, "NVS": 1.0, "GSK": 2.0, "SNY": 0.5, "TTE": 1.0, "BP": 6.0,
+    "RIO": 1.0, "DEO": 4.0, "BTI": 1.0, "ERIC": 1.0, "NOK": 1.0, "TM": 10.0,
+    "SE": 1.0, "BIDU": 8.0, "JD": 2.0, "PDD": 4.0, "NTES": 5.0, "TCOM": 1.0,
+    "PBR": 2.0, "BHP": 2.0,
 }
 
 # XBRL concept candidates, in preference order — us-gaap then ifrs-full names
 # (both namespaces are scanned; recency picks the winner).
 REVENUE = ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
            "SalesRevenueNet", "SalesRevenueGoodsNet",
-           "Revenue", "RevenueFromContractsWithCustomers"]
+           "RevenueFromContractWithCustomerIncludingAssessedTax",
+           "RegulatedAndUnregulatedOperatingRevenue",       # utilities (NEE)
+           "Revenue", "RevenueFromContractsWithCustomers",
+           "RevenueFromSaleOfGoods"]                        # ifrs (Sanofi)
+GROSS_PROFIT = ["GrossProfit"]
 EBIT = ["OperatingIncomeLoss", "ProfitLossFromOperatingActivities", "OperatingProfitLoss"]
 COSTS_AND_EXPENSES = ["CostsAndExpenses"]
 NET_INCOME = ["NetIncomeLoss", "ProfitLoss"]
@@ -141,7 +151,7 @@ def _listing_shares(ticker: str, facts: dict, currency: str, *,
         candidates.append((yahoo_shares, "Yahoo listing share count"))
     if edgar_shares and ticker in KNOWN_ADR_RATIOS:
         candidates.append((edgar_shares / KNOWN_ADR_RATIOS[ticker],
-                           f"EDGAR ÷ ADR ratio {KNOWN_ADR_RATIOS[ticker]:.0f}"))
+                           f"EDGAR ÷ ADR ratio {KNOWN_ADR_RATIOS[ticker]:g}"))
     if edgar_shares:
         candidates.append((edgar_shares, "EDGAR shares outstanding"))
     if not candidates:
@@ -178,6 +188,15 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
     # ---- statement currency & essentials ------------------------------------
     rev_raw, currency = edgar.monetary_series(facts, REVENUE, flow=True)
     if len(rev_raw) < 2 or currency is None:
+        # Some filers (Novartis) tag no revenue concept at all. Identity from
+        # filed values: revenue = gross profit + cost of sales.
+        gp, gp_ccy = edgar.monetary_series(facts, GROSS_PROFIT, flow=True)
+        cos, _ = edgar.monetary_series(facts, COGS, currency=gp_ccy, flow=True)
+        cos_d = dict(cos)
+        derived_rev = [(end, v + cos_d[end]) for end, v in gp if end in cos_d]
+        if len(derived_rev) >= 2:
+            rev_raw, currency = derived_rev, gp_ccy
+    if len(rev_raw) < 2 or currency is None:
         raise ValueError(f"{ticker}: EDGAR lacks XBRL revenue "
                          "(bank/new entity/non-SEC filer?)")
     fx = market.fx_to_usd(currency)
@@ -191,8 +210,14 @@ def build_company(ticker: str, *, risk_free: float) -> CompanyInputs:
         costs = dict(money.series(COSTS_AND_EXPENSES, flow=True))
         derived = [(end, rev - costs[end]) for end, rev in rev_s if end in costs]
         if not derived or (ebit_s and derived[-1][0] <= ebit_s[-1][0]):
-            # Fallback 2: EBIT ≈ pretax income + interest expense.
+            # Fallback 2: EBIT ≈ pretax income + interest expense. The pretax
+            # line itself can be stale/untagged (TotalEnergies) — then it is
+            # rebuilt from the filed identity pretax = net income + tax.
             pretax_s = dict(money.series(PRETAX, flow=True))
+            tax_s = dict(money.series(TAX, flow=True))
+            for end, ni_v in money.series(NET_INCOME, flow=True):
+                if end not in pretax_s and end in tax_s:
+                    pretax_s[end] = ni_v + tax_s[end]
             interest_s = dict(money.series(INTEREST, flow=True))
             derived = [(end, pretax_s[end] + interest_s.get(end, 0.0))
                        for end in sorted(pretax_s)]
